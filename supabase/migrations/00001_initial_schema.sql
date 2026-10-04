@@ -1040,6 +1040,21 @@ BEGIN
         status = 'confirmed',
         waitlist_position = NULL
       WHERE id = next_waitlisted;
+
+      -- A waitlisted booking does not consume its entitlement until it is
+      -- promoted into a confirmed spot.
+      UPDATE class_packs
+      SET classes_remaining = classes_remaining - 1,
+          status = CASE
+            WHEN classes_remaining - 1 <= 0 THEN 'exhausted'::class_pack_status
+            ELSE status
+          END
+      WHERE id = (SELECT class_pack_id FROM bookings WHERE id = next_waitlisted)
+        AND classes_remaining > 0;
+
+      UPDATE memberships
+      SET classes_used_this_cycle = classes_used_this_cycle + 1
+      WHERE id = (SELECT membership_id FROM bookings WHERE id = next_waitlisted);
     END IF;
   END IF;
   RETURN NEW;
