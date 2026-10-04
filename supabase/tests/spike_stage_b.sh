@@ -9,7 +9,7 @@ if ! "$supabase_bin" status >/dev/null 2>&1; then
   exit 2
 fi
 
-db_url="$($supabase_bin status -o env | awk -F= '/^DB_URL=/{sub(/^DB_URL=/, ""); print}')"
+db_url="$($supabase_bin status -o env | awk -F= '/^DB_URL=/{sub(/^DB_URL=/, ""); gsub(/^["]|["]$/, ""); print}')"
 if [[ -z "$db_url" ]]; then
   echo "Could not read DB_URL from supabase status" >&2
   exit 2
