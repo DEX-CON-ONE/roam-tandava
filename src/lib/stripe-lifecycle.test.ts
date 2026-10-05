@@ -36,10 +36,11 @@ function databaseMock() {
               if (table === "stripe_webhook_events" && eventRows.has(String(value))) eventRows.set(String(value), { status: "processed" });
               return { error: null };
             };
-            return { eq: async (_secondColumn: string, secondValue: unknown) => {
+            const chain = { eq: async (_secondColumn: string, secondValue: unknown) => {
               if (table === "stripe_webhook_events" && eventRows.has(String(secondValue))) eventRows.set(String(secondValue), { status: "processed" });
               return { error: null };
-            }, then: finish };
+            }, then: (resolve: (value: { error: null }) => unknown, reject?: (reason: unknown) => unknown) => finish().then(resolve, reject) };
+            return chain;
           } };
         },
         select() { return { eq: (_column: string, value: unknown) => ({ single: async () => ({ data: eventRows.get(String(value)) ? { id: String(value), ...eventRows.get(String(value)) } : null, error: null }) }) }; },
