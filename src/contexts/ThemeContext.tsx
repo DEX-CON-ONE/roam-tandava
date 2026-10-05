@@ -137,6 +137,12 @@ export interface StudioBranding {
   fontOverride: string | null;
 }
 
+export interface StoredStudioBranding {
+  primary_color: string | null;
+  secondary_color: string | null;
+  font: string | null;
+}
+
 const DEFAULT_BRANDING: StudioBranding = {
   themeId: 'mystic-night',
   logoUrl: null,
@@ -144,6 +150,14 @@ const DEFAULT_BRANDING: StudioBranding = {
   secondaryColorOverride: null,
   fontOverride: null,
 };
+
+export function brandingFromStudio(studio: StoredStudioBranding): Partial<StudioBranding> {
+  return {
+    primaryColorOverride: studio.primary_color,
+    secondaryColorOverride: studio.secondary_color,
+    fontOverride: studio.font,
+  };
+}
 
 // ============================================================================
 // Context

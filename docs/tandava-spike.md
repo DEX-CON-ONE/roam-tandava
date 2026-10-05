@@ -51,3 +51,32 @@ secrets, and a real signed Stripe delivery must be exercised there.
 
 The waitlist promotion defect found during this spike was fixed at the shared
 database trigger boundary, rather than papered over in the harness.
+
+## Issue #7 Roam fixture and walkthrough
+
+Migration `00020_roam_local_seed.sql` creates the local-only `ROAM Athletic Club`
+fixture. It is rerunnable and uses only published Roam facts:
+
+- Farnham Park, GU35 9LW
+- UNDEFEATED: Wednesday 09:30 and Saturday 08:30
+- HYBRID, X4, and Farnham Park Outdoor Training offerings
+- Personal Training is not seeded as bookable
+
+Prices, instructors, and other unpublished commercial details remain unknown
+rather than being invented. The schema's existing duration and capacity defaults
+are local database defaults only; this fixture does not claim them as Roam facts.
+
+The browser walkthrough (sign-in → pick class → book → cancel outside/inside the
+window → full class → waitlist), including sanitized `1280x800` and `390x844`
+screenshots, is deferred to issue #9. It is not acceptance evidence for this
+local fixture PR and is intentionally not reproduced with credentials or
+fabricated screenshots here.
+
+| Journey evidence | Status | Owner |
+| --- | --- | --- |
+| Browser walkthrough and sanitized desktop/mobile screenshots | DEFERRED to #9 | Mothership/deployed app |
+
+The fork's existing `ThemeContext`/CSS custom-property boundary is used. Roam's
+approved site values are applied through the seeded studio record: primary
+`#b66d3b`, secondary `#313b32`, and Josefin Sans. The canonical Roam logo is
+not altered or copied into this fork.

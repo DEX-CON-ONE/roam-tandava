@@ -13,10 +13,12 @@
  * private or unknown slug lands on the neutral "not available" state below.
  */
 
+import { useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useStudioStorefront, usePublicSchedule } from "@/hooks/useBooking";
 import { isBackendConfigured } from "@/lib/backend";
 import { formatPrice } from "@/lib/reference-data";
+import { brandingFromStudio, useTheme } from "@/contexts/ThemeContext";
 import { SEOHead } from "@/components/seo/SEOHead";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -36,6 +38,16 @@ export default function StudioStorefront({ slug: slugProp }: { slug?: string } =
   const slug = slugProp ?? params.slug;
   const { data: storefront, isLoading, isError } = useStudioStorefront(slug);
   const { data: schedule } = usePublicSchedule(slug);
+  const { setBranding, resetToDefault } = useTheme();
+
+  useEffect(() => {
+    if (!storefront) {
+      resetToDefault();
+      return;
+    }
+
+    setBranding(brandingFromStudio(storefront.studio));
+  }, [storefront, setBranding, resetToDefault]);
 
   // Storefronts read from the live backend; the demo build has none.
   if (!isBackendConfigured()) {
