@@ -47,3 +47,36 @@ acceptance claim is made.
 
 The waitlist promotion defect found during this spike was fixed at the shared
 database trigger boundary, rather than papered over in the harness.
+
+## Issue #7 Roam fixture and walkthrough
+
+Migration `00019_roam_local_seed.sql` creates the local-only `ROAM Athletic Club`
+fixture. It is rerunnable and uses only published Roam facts:
+
+- Farnham Park, GU35 9LW
+- UNDEFEATED: Wednesday 09:30 and Saturday 08:30
+- HYBRID, X4, and Farnham Park Outdoor Training offerings
+- Personal Training is not seeded as bookable
+
+Prices, instructors, and other unpublished commercial details remain unknown
+rather than being invented. Capacity is a 20-person local harness default and is
+marked for replacement when Roam supplies the authoritative value.
+
+The walkthrough requires a running local Supabase stack and browser session. No
+credentials or screenshots are committed by this change. Capture sanitized
+screenshots at both `1280x800` and `390x844` under `docs/spike-screenshots/`.
+
+| Journey step | 1280×800 | 390×844 | Result / note |
+| --- | --- | --- | --- |
+| Sign in | TODO | TODO | Requires local auth user; no credentials in repo |
+| Pick a class | TODO | TODO | Verify Roam schedule renders |
+| Book a class | TODO | TODO | Verify confirmed booking and entitlement |
+| Cancel outside 24h | TODO | TODO | Verify on-time cancellation/refund |
+| Cancel inside 24h | TODO | TODO | Verify late-cancel behaviour |
+| Full class | TODO | TODO | Verify waitlist action |
+| Waitlist | TODO | TODO | Verify waitlist status and promotion path |
+
+The fork's existing `ThemeContext`/CSS custom-property boundary is used. Roam's
+approved site values are applied through the seeded studio record: near-black
+primary/secondary (`#1c1c1c`), white accent, and DM Sans. The canonical Roam
+logo is not altered or copied into this fork.
