@@ -56,14 +56,14 @@ BEGIN
   ] LOOP
     v_slug := lower(regexp_replace(v_name, '[^a-zA-Z0-9]+', '-', 'g'));
     INSERT INTO offerings (
-      studio_id, name, slug, description, duration_minutes, capacity,
+      studio_id, name, slug, description,
       drop_in_price_cents, discoverable, is_active
     ) VALUES (
       v_studio, v_name, v_slug,
       CASE WHEN v_name = 'Farnham Park Outdoor Training'
         THEN 'Outdoor training at Farnham Park.'
         ELSE NULL END,
-      60, 20, NULL, TRUE, TRUE
+      NULL, TRUE, TRUE
     )
     ON CONFLICT (studio_id, slug) DO UPDATE SET
       name = EXCLUDED.name,
@@ -78,6 +78,8 @@ BEGIN
   WHERE studio_id = v_studio AND slug = 'undefeated';
 
   -- The published timetable gives Wednesday 09:30 and Saturday 08:30 for UNDEFEATED.
+  -- The schema defaults supply local harness duration/capacity; Roam's commercial
+  -- values remain unknown until an authoritative schedule is provided.
   -- Seed the next eight weeks so the local storefront remains useful after reset.
   FOR v_day, v_time IN
     SELECT day::DATE, time::TIME
@@ -87,9 +89,9 @@ BEGIN
   LOOP
     v_start := (v_day + v_time) AT TIME ZONE 'Europe/London';
     INSERT INTO class_occurrences (
-      studio_id, offering_id, location_id, starts_at, ends_at, capacity
+      studio_id, offering_id, location_id, starts_at, ends_at
     ) VALUES (
-      v_studio, v_offering, v_location, v_start, v_start + INTERVAL '60 minutes', 20
+      v_studio, v_offering, v_location, v_start, v_start + INTERVAL '60 minutes'
     )
     ON CONFLICT DO NOTHING;
   END LOOP;

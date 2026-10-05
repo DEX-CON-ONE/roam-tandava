@@ -59,8 +59,9 @@ fixture. It is rerunnable and uses only published Roam facts:
 - Personal Training is not seeded as bookable
 
 Prices, instructors, and other unpublished commercial details remain unknown
-rather than being invented. Capacity is a 20-person local harness default and is
-marked for replacement when Roam supplies the authoritative value.
+rather than being invented. The schema's existing duration and capacity defaults
+are used only for the local harness and are not presented as Roam facts; replace
+them when Roam supplies an authoritative schedule.
 
 The walkthrough requires a running local Supabase stack and browser session. No
 credentials or screenshots are committed by this change. Capture sanitized
