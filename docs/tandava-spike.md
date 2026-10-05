@@ -50,7 +50,7 @@ database trigger boundary, rather than papered over in the harness.
 
 ## Issue #7 Roam fixture and walkthrough
 
-Migration `00019_roam_local_seed.sql` creates the local-only `ROAM Athletic Club`
+Migration `00020_roam_local_seed.sql` creates the local-only `ROAM Athletic Club`
 fixture. It is rerunnable and uses only published Roam facts:
 
 - Farnham Park, GU35 9LW
