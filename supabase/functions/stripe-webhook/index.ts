@@ -20,8 +20,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import Stripe from "https://esm.sh/stripe@14?target=deno";
+import { assertStripeKeyMode, stripeStatusToMembershipStatus } from "../stripe/config.ts";
 
-const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY")!, {
+const stripe = new Stripe(assertStripeKeyMode(Deno.env.get("STRIPE_SECRET_KEY"), "STRIPE_SECRET_KEY"), {
   apiVersion: "2024-06-20",
 });
 
@@ -51,6 +52,19 @@ serve(async (req) => {
   console.log(`[stripe-webhook] Received: ${event.type}`);
 
   try {
+    const { data: claimed, error: claimError } = await supabase
+      .from("stripe_webhook_events")
+      .insert({ id: event.id, type: event.type })
+      .select("id")
+      .maybeSingle();
+    if (claimError) throw claimError;
+    if (!claimed) {
+      return new Response(JSON.stringify({ received: true, duplicate: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
     switch (event.type) {
       case "checkout.session.completed":
         await handleCheckoutCompleted(event.data.object as Stripe.Checkout.Session);
@@ -68,13 +82,25 @@ serve(async (req) => {
         await handlePaymentFailed(event.data.object as Stripe.Invoice);
         break;
 
+      case "invoice.payment_succeeded":
+        await handlePaymentSucceeded(event.data.object as Stripe.Invoice);
+        break;
       default:
         console.log(`[stripe-webhook] Unhandled event type: ${event.type}`);
     }
+
+    const { error: completeError } = await supabase
+      .from("stripe_webhook_events")
+      .update({ status: "processed", processed_at: new Date().toISOString() })
+      .eq("id", event.id);
+    if (completeError) throw completeError;
   } catch (err) {
     console.error(`[stripe-webhook] Error handling ${event.type}:`, err);
-    // Return 200 to acknowledge receipt — Stripe will retry on 5xx
-    // Log the error for investigation but don't block
+    // A failed event remains processing and receives Stripe's retry.
+    return new Response(JSON.stringify({ received: false }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
   }
 
   return new Response(JSON.stringify({ received: true }), {
@@ -106,19 +132,26 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
         })
         .select("id")
         .single();
-      if (txnError) {
+      if (txnError && txnError.code !== "23505") {
         console.error("Failed to record drop-in transaction:", txnError);
         return;
       }
+
+      const transaction = txn ?? (await supabase
+        .from("transactions")
+        .select("id")
+        .eq("stripe_payment_intent_id", paymentIntentId)
+        .single()).data;
+      if (!transaction) return;
 
       const { error: bookingError } = await supabase.from("bookings").insert({
         studio_id: metadata.studio_id,
         class_occurrence_id: metadata.occurrence_id,
         profile_id: metadata.profile_id,
         status: "confirmed",
-        transaction_id: txn.id,
+        transaction_id: transaction.id,
       });
-      if (bookingError) console.error("Failed to create booking:", bookingError);
+      if (bookingError && bookingError.code !== "23505") console.error("Failed to create booking:", bookingError);
       break;
     }
 
@@ -152,10 +185,17 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
         })
         .select("id")
         .single();
-      if (memErr) {
+      if (memErr && memErr.code !== "23505") {
         console.error("Failed to create membership:", memErr);
         return;
       }
+
+      const resolvedMembership = membership ?? (await supabase
+        .from("memberships")
+        .select("id")
+        .eq("stripe_subscription_id", session.subscription as string)
+        .single()).data;
+      if (!resolvedMembership) return;
 
       const { error: txnError } = await supabase.from("transactions").insert({
         studio_id: metadata.studio_id,
@@ -164,7 +204,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
         status: "completed",
         amount_cents: session.amount_total ?? mt?.price_cents ?? 0,
         stripe_payment_intent_id: paymentIntentId,
-        membership_id: membership.id,
+        membership_id: resolvedMembership.id,
       });
       if (txnError) console.error("Failed to record membership transaction:", txnError);
       break;
@@ -239,10 +279,17 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
         })
         .select("id")
         .single();
-      if (packErr) {
+      if (packErr && packErr.code !== "23505") {
         console.error("Failed to create class pack:", packErr);
         return;
       }
+
+      const resolvedPack = pack ?? (await supabase
+        .from("class_packs")
+        .select("id")
+        .eq("stripe_payment_intent_id", paymentIntentId)
+        .single()).data;
+      if (!resolvedPack) return;
 
       const { error: txnError } = await supabase.from("transactions").insert({
         studio_id: metadata.studio_id,
@@ -251,7 +298,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
         status: "completed",
         amount_cents: session.amount_total ?? pt.price_cents ?? 0,
         stripe_payment_intent_id: paymentIntentId,
-        class_pack_id: pack.id,
+        class_pack_id: resolvedPack.id,
       });
       if (txnError) console.error("Failed to record class pack transaction:", txnError);
       break;
@@ -262,21 +309,10 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
 async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
   // Map Stripe subscription status → membership_status enum
   // (active, paused, cancelled, expired, past_due).
-  const statusMap: Record<string, string> = {
-    active: "active",
-    trialing: "active",
-    past_due: "past_due",
-    unpaid: "past_due",
-    incomplete: "past_due",
-    incomplete_expired: "expired",
-    canceled: "cancelled",
-    paused: "paused",
-  };
-
   const { error } = await supabase
     .from("memberships")
     .update({
-      status: statusMap[subscription.status] || "active",
+      status: stripeStatusToMembershipStatus(subscription.status),
       current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
       current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
     })
@@ -303,4 +339,14 @@ async function handlePaymentFailed(invoice: Stripe.Invoice) {
     .eq("stripe_subscription_id", invoice.subscription as string);
 
   if (error) console.error("Failed to mark membership as past_due:", error);
+}
+
+async function handlePaymentSucceeded(invoice: Stripe.Invoice) {
+  if (!invoice.subscription) return;
+  const { error } = await supabase
+    .from("memberships")
+    .update({ status: "active" })
+    .eq("stripe_subscription_id", invoice.subscription as string)
+    .eq("status", "past_due");
+  if (error) console.error("Failed to restore membership after payment:", error);
 }
