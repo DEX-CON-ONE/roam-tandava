@@ -60,22 +60,17 @@ fixture. It is rerunnable and uses only published Roam facts:
 
 Prices, instructors, and other unpublished commercial details remain unknown
 rather than being invented. The schema's existing duration and capacity defaults
-are used only for the local harness and are not presented as Roam facts; replace
-them when Roam supplies an authoritative schedule.
+are local database defaults only; this fixture does not claim them as Roam facts.
 
-The walkthrough requires a running local Supabase stack and browser session. No
-credentials or screenshots are committed by this change. Capture sanitized
-screenshots at both `1280x800` and `390x844` under `docs/spike-screenshots/`.
+The browser walkthrough (sign-in → pick class → book → cancel outside/inside the
+window → full class → waitlist), including sanitized `1280x800` and `390x844`
+screenshots, is deferred to issue #9. It is not acceptance evidence for this
+local fixture PR and is intentionally not reproduced with credentials or
+fabricated screenshots here.
 
-| Journey step | 1280×800 | 390×844 | Result / note |
-| --- | --- | --- | --- |
-| Sign in | TODO | TODO | Requires local auth user; no credentials in repo |
-| Pick a class | TODO | TODO | Verify Roam schedule renders |
-| Book a class | TODO | TODO | Verify confirmed booking and entitlement |
-| Cancel outside 24h | TODO | TODO | Verify on-time cancellation/refund |
-| Cancel inside 24h | TODO | TODO | Verify late-cancel behaviour |
-| Full class | TODO | TODO | Verify waitlist action |
-| Waitlist | TODO | TODO | Verify waitlist status and promotion path |
+| Journey evidence | Status | Owner |
+| --- | --- | --- |
+| Browser walkthrough and sanitized desktop/mobile screenshots | DEFERRED to #9 | Mothership/deployed app |
 
 The fork's existing `ThemeContext`/CSS custom-property boundary is used. Roam's
 approved site values are applied through the seeded studio record: near-black
