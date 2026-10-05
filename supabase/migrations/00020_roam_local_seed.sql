@@ -13,6 +13,7 @@ DECLARE
   v_name TEXT;
   v_slug TEXT;
 BEGIN
+  -- from SOFAKING-RoamAthletics-site app/globals.css @ main, approved 2026-10-04
   INSERT INTO studios (
     name, slug, description, timezone, currency, discoverable,
     brand_primary_color, brand_secondary_color, brand_font,
@@ -20,7 +21,7 @@ BEGIN
   ) VALUES (
     'ROAM Athletic Club', 'roam-athletic-club',
     'Boutique strength and conditioning in a converted barn in Farnham.',
-    'Europe/London', 'GBP', TRUE, '#1c1c1c', '#1c1c1c', 'DM Sans',
+    'Europe/London', 'GBP', TRUE, '#b66d3b', '#313b32', 'Josefin Sans',
     1440, TRUE
   )
   ON CONFLICT (slug) DO UPDATE SET

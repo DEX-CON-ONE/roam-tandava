@@ -73,6 +73,6 @@ fabricated screenshots here.
 | Browser walkthrough and sanitized desktop/mobile screenshots | DEFERRED to #9 | Mothership/deployed app |
 
 The fork's existing `ThemeContext`/CSS custom-property boundary is used. Roam's
-approved site values are applied through the seeded studio record: near-black
-primary/secondary (`#1c1c1c`), white accent, and DM Sans. The canonical Roam
-logo is not altered or copied into this fork.
+approved site values are applied through the seeded studio record: primary
+`#b66d3b`, secondary `#313b32`, and Josefin Sans. The canonical Roam logo is
+not altered or copied into this fork.

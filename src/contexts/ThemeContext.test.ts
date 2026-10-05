@@ -4,13 +4,13 @@ import { brandingFromStudio } from "./ThemeContext";
 describe("brandingFromStudio", () => {
   it("maps stored studio branding to the ThemeContext overrides", () => {
     expect(brandingFromStudio({
-      primary_color: "#1c1c1c",
-      secondary_color: "#ffffff",
-      font: "DM Sans",
+      primary_color: "#b66d3b",
+      secondary_color: "#313b32",
+      font: "Josefin Sans",
     })).toEqual({
-      primaryColorOverride: "#1c1c1c",
-      secondaryColorOverride: "#ffffff",
-      fontOverride: "DM Sans",
+      primaryColorOverride: "#b66d3b",
+      secondaryColorOverride: "#313b32",
+      fontOverride: "Josefin Sans",
     });
   });
 
