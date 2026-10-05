@@ -1,6 +1,9 @@
-export function assertStripeKeyMode(key: string | undefined, name: string): string {
+export function assertStripeKeyMode(
+  key: string | undefined,
+  name: string,
+  allowLive = Deno.env.get("ALLOW_LIVE_STRIPE") === "true",
+): string {
   if (!key) throw new Error(`${name} is not configured`);
-  const allowLive = Deno.env.get("ALLOW_LIVE_STRIPE") === "true";
   const isLive = key.startsWith("sk_live_") || key.startsWith("pk_live_");
   if (isLive && !allowLive) {
     throw new Error(`${name} is live-mode but ALLOW_LIVE_STRIPE is not enabled`);
@@ -22,7 +25,7 @@ export function stripeStatusToMembershipStatus(status: string): string {
 }
 
 export function entitlementAfterCancellation(
-  source: "membership" | "class_pack",
+  _source: "membership" | "class_pack",
   late: boolean,
 ): { restore: boolean; reason: "on_time_refund" | "late_cancel_forfeit" } {
   return late

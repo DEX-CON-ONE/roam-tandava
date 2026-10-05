@@ -151,5 +151,22 @@ SELECT cancel_booking((SELECT id FROM bookings WHERE profile_id = (SELECT member
 SELECT spike_assert((SELECT classes_used_this_cycle FROM memberships WHERE id = (SELECT membership_a FROM spike_ids)) = 1, 'late cancellation incorrectly refunded membership');
 SELECT spike_assert((SELECT COUNT(*) FROM transactions WHERE booking_id = (SELECT id FROM bookings WHERE profile_id = (SELECT member_a FROM spike_ids) AND class_occurrence_id = (SELECT occurrence_late FROM spike_ids)) AND type = 'late_cancel_fee' AND amount_cents = 500) = 1, 'late cancellation fee missing');
 
+-- Stripe webhook delivery is idempotent and service-role only.
+SELECT set_config('role', 'service_role', TRUE);
+INSERT INTO stripe_webhook_events (id, type) VALUES ('evt_spike', 'checkout.session.completed');
+INSERT INTO stripe_webhook_events (id, type) VALUES ('evt_spike', 'checkout.session.completed') ON CONFLICT (id) DO NOTHING;
+SELECT spike_assert((SELECT COUNT(*) FROM stripe_webhook_events WHERE id = 'evt_spike') = 1, 'duplicate Stripe event was recorded');
+
+SELECT set_config('role', 'authenticated', TRUE);
+SELECT spike_assert((SELECT COUNT(*) FROM stripe_webhook_events) = 0, 'authenticated role can read Stripe event ledger');
+DO $$
+BEGIN
+  BEGIN
+    INSERT INTO stripe_webhook_events (id, type) VALUES ('evt_forbidden', 'checkout.session.completed');
+    RAISE EXCEPTION 'SPIKE FAIL: authenticated role can write Stripe event ledger';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+END $$;
+
 SELECT 'PASS: RLS isolation, booking, capacity, double-booking, cancellation window, waitlist promotion, and entitlement consistency' AS result;
 ROLLBACK;

@@ -26,5 +26,11 @@ CREATE UNIQUE INDEX idx_transactions_stripe_payment_intent
 
 ALTER TABLE stripe_webhook_events ENABLE ROW LEVEL SECURITY;
 
+CREATE POLICY "Service role only for Stripe webhook events"
+  ON stripe_webhook_events
+  FOR ALL
+  USING (auth.role() = 'service_role')
+  WITH CHECK (auth.role() = 'service_role');
+
 COMMENT ON TABLE stripe_webhook_events IS
   'Idempotency ledger for verified Stripe webhook event IDs; service role only.';
