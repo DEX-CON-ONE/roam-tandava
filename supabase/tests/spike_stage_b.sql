@@ -154,7 +154,14 @@ SELECT spike_assert((SELECT COUNT(*) FROM transactions WHERE booking_id = (SELEC
 -- Stripe webhook delivery is idempotent and service-role only.
 SELECT set_config('role', 'service_role', TRUE);
 INSERT INTO stripe_webhook_events (id, type) VALUES ('evt_spike', 'checkout.session.completed');
-INSERT INTO stripe_webhook_events (id, type) VALUES ('evt_spike', 'checkout.session.completed') ON CONFLICT (id) DO NOTHING;
+DO $$
+BEGIN
+  BEGIN
+    INSERT INTO stripe_webhook_events (id, type) VALUES ('evt_spike', 'checkout.session.completed');
+    RAISE EXCEPTION 'SPIKE FAIL: duplicate Stripe event insert did not raise unique_violation';
+  EXCEPTION WHEN unique_violation THEN NULL;
+  END;
+END $$;
 SELECT spike_assert((SELECT COUNT(*) FROM stripe_webhook_events WHERE id = 'evt_spike') = 1, 'duplicate Stripe event was recorded');
 
 SELECT set_config('role', 'authenticated', TRUE);

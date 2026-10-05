@@ -15,7 +15,7 @@ function signedRequest(event: Record<string, unknown>, secret = webhookSecret) {
 }
 
 function databaseMock() {
-  const eventIds = new Set<string>();
+  const eventRows = new Map<string, { status: "processing" | "processed" }>();
   const calls: Array<{ table: string; operation: string; values?: unknown }> = [];
   const database = {
     from(table: string) {
@@ -24,16 +24,25 @@ function databaseMock() {
           calls.push({ table, operation: "insert", values });
           return { select: () => ({ maybeSingle: async () => {
             const id = (values as { id?: string }).id;
-            if (table === "stripe_webhook_events" && id && eventIds.has(id)) return { data: null, error: null };
-            if (table === "stripe_webhook_events" && id) eventIds.add(id);
+            if (table === "stripe_webhook_events" && id && eventRows.has(id)) return { data: null, error: { code: "23505" } };
+            if (table === "stripe_webhook_events" && id) eventRows.set(id, { status: "processing" });
             return { data: { id }, error: null };
           }, single: async () => ({ data: { id: "fixture-id" }, error: null }) }) };
         },
         update(values: unknown) {
           calls.push({ table, operation: "update", values });
-          return { eq: () => ({ eq: async () => ({ error: null }) }) };
+          return { eq: (_column: string, value: unknown) => {
+            const finish = async () => {
+              if (table === "stripe_webhook_events" && eventRows.has(String(value))) eventRows.set(String(value), { status: "processed" });
+              return { error: null };
+            };
+            return { eq: async (_secondColumn: string, secondValue: unknown) => {
+              if (table === "stripe_webhook_events" && eventRows.has(String(secondValue))) eventRows.set(String(secondValue), { status: "processed" });
+              return { error: null };
+            }, then: finish };
+          } };
         },
-        select() { return { eq: () => ({ single: async () => ({ data: null, error: null }) }) }; },
+        select() { return { eq: (_column: string, value: unknown) => ({ single: async () => ({ data: eventRows.get(String(value)) ? { id: String(value), ...eventRows.get(String(value)) } : null, error: null }) }) }; },
       };
     },
     rpc: vi.fn(async () => ({ error: null })),
@@ -90,6 +99,23 @@ describe("Stripe webhook production handler", () => {
     expect(await (await handler(signedRequest(event))).json()).toMatchObject({ duplicate: true });
     expect(calls.filter((call) => call.table === "stripe_webhook_events" && call.operation === "insert")).toHaveLength(2);
     expect(calls.filter((call) => call.table === "memberships" && call.operation === "update")).toHaveLength(1);
+  });
+
+  it("retries a claimed event after the first processing attempt fails", async () => {
+    const createHandler = await loadHandler();
+    const { database } = databaseMock();
+    let attempts = 0;
+    const handler = createHandler({ supabase: database, webhookSecret,
+      stripe: { webhooks: { constructEvent: (body) => JSON.parse(body) as StripeEvent } } satisfies StripeWebhookClient,
+      onEvent: async () => {
+        attempts += 1;
+        if (attempts === 1) throw new Error("transient fixture failure");
+      },
+    });
+    const event = { id: "evt_retry_fixture", type: "invoice.payment_failed", data: { object: {} } };
+    expect((await handler(signedRequest(event))).status).toBe(500);
+    expect((await handler(signedRequest(event))).status).toBe(200);
+    expect(attempts).toBe(2);
   });
 
   it("marks failed payments past_due and consumes a class pack once per event", async () => {
