@@ -1,4 +1,14 @@
-import type Stripe from "stripe";
+export type StripeEvent = {
+  id: string;
+  type: string;
+  data: { object: unknown };
+};
+
+export type StripeWebhookClient = {
+  webhooks: {
+    constructEvent: (payload: string, signature: string, secret: string) => StripeEvent;
+  };
+};
 
 export type StripeDatabase = {
   from: (table: string) => {
@@ -13,18 +23,18 @@ export function createStripeWebhookHandler({
   supabase,
   onEvent,
 }: {
-  stripe: Pick<Stripe, "webhooks">;
+  stripe: StripeWebhookClient;
   webhookSecret: string;
   supabase: StripeDatabase;
-  onEvent: (event: Stripe.Event, supabase: StripeDatabase) => Promise<void>;
+  onEvent: (event: StripeEvent, supabase: StripeDatabase) => Promise<void>;
 }) {
   return async (req: Request) => {
     const signature = req.headers.get("stripe-signature");
     if (!signature) return new Response("Missing stripe-signature header", { status: 400 });
 
-    let event: Stripe.Event;
+    let event: StripeEvent;
     try {
-      event = stripe.webhooks.constructEvent(await req.text(), signature, webhookSecret) as Stripe.Event;
+      event = stripe.webhooks.constructEvent(await req.text(), signature, webhookSecret);
     } catch (error) {
       console.error("Webhook signature verification failed:", error);
       return new Response("Invalid signature", { status: 400 });

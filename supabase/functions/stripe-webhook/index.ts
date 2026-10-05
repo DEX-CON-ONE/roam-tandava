@@ -21,7 +21,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import Stripe from "https://esm.sh/stripe@14?target=deno";
 import { assertStripeKeyMode, stripeStatusToMembershipStatus } from "../stripe/config.ts";
-import { createStripeWebhookHandler as createRequestHandler } from "./handler.ts";
+import { createStripeWebhookHandler as createRequestHandler, type StripeWebhookClient } from "./handler.ts";
 
 const stripe = new Stripe(assertStripeKeyMode(
   Deno.env.get("STRIPE_SECRET_KEY"),
@@ -45,7 +45,7 @@ export function createStripeWebhookHandler(
   const secret = dependencies.webhookSecret ?? webhookSecret;
   const database = dependencies.supabase ?? supabase;
   return createRequestHandler({
-    stripe: stripeClient,
+    stripe: stripeClient as StripeWebhookClient,
     webhookSecret: secret,
     supabase: database,
     onEvent: async (event, database) => {

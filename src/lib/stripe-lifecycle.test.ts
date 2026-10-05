@@ -1,7 +1,7 @@
 import { createHmac } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { assertStripeKeyMode, stripeStatusToMembershipStatus } from "../../supabase/functions/stripe/config.ts";
-import type { StripeDatabase } from "../../supabase/functions/stripe-webhook/handler.ts";
+import type { StripeDatabase, StripeEvent, StripeWebhookClient } from "../../supabase/functions/stripe-webhook/handler.ts";
 
 const webhookSecret = "whsec_test_fixture_only";
 
@@ -68,7 +68,7 @@ describe("Stripe webhook production handler", () => {
     const createHandler = await loadHandler();
     const { database, calls } = databaseMock();
     const handler = createHandler({ supabase: database, webhookSecret,
-      stripe: { webhooks: { constructEvent: () => { throw new Error("bad signature"); } } } as never,
+      stripe: { webhooks: { constructEvent: () => { throw new Error("bad signature"); } } } satisfies StripeWebhookClient,
       onEvent: vi.fn(), });
     const response = await handler(new Request("https://test.invalid", {
       method: "POST", body: "{}", headers: { "stripe-signature": "invalid" },
@@ -81,7 +81,7 @@ describe("Stripe webhook production handler", () => {
     const createHandler = await loadHandler();
     const { database, calls } = databaseMock();
     const handler = createHandler({ supabase: database, webhookSecret,
-      stripe: { webhooks: { constructEvent: (body) => JSON.parse(body) } } as never,
+      stripe: { webhooks: { constructEvent: (body) => JSON.parse(body) as StripeEvent } } satisfies StripeWebhookClient,
       onEvent: async (_event, db) => { await (db as StripeDatabase & { from: (table: string) => { update: (v: unknown) => { eq: (c: string, value: unknown) => Promise<unknown> } } }).from("memberships").update({ status: "active" }).eq("stripe_subscription_id", "sub_fixture"); }, });
     const event = { id: "evt_replay_fixture", type: "customer.subscription.updated", data: {
       object: { id: "sub_fixture", status: "active", current_period_start: 0, current_period_end: 1 },
@@ -96,7 +96,7 @@ describe("Stripe webhook production handler", () => {
     const createHandler = await loadHandler();
     const { database, calls } = databaseMock();
     const handler = createHandler({ supabase: database, webhookSecret,
-      stripe: { webhooks: { constructEvent: (body) => JSON.parse(body) } } as never,
+      stripe: { webhooks: { constructEvent: (body) => JSON.parse(body) as StripeEvent } } satisfies StripeWebhookClient,
       onEvent: async (event, db) => {
         if (event.type === "invoice.payment_failed") await (db as StripeDatabase & { from: (table: string) => { update: (v: unknown) => { eq: (c: string, value: unknown) => Promise<unknown> } } }).from("memberships").update({ status: "past_due" }).eq("stripe_subscription_id", "sub_fixture");
         if (event.type === "checkout.session.completed") await (db as StripeDatabase & { from: (table: string) => { insert: (v: unknown) => { select: (c: string) => { single: () => Promise<unknown> } } } }).from("class_packs").insert({ stripe_payment_intent_id: "pi_fixture" }).select("id").single();
