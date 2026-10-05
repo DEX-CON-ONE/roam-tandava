@@ -1,7 +1,7 @@
 export function assertStripeKeyMode(
   key: string | undefined,
-  name: string,
-  allowLive = Deno.env.get("ALLOW_LIVE_STRIPE") === "true",
+  allowLive: boolean,
+  name = "STRIPE_SECRET_KEY",
 ): string {
   if (!key) throw new Error(`${name} is not configured`);
   const isLive = key.startsWith("sk_live_") || key.startsWith("pk_live_");
