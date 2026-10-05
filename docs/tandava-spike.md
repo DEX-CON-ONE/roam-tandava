@@ -34,7 +34,7 @@ the same `book_class`/`cancel_booking` database contracts used by the app.
 | Authenticated app journey | NOT PROVABLE | The local database/RPC path is covered, but this spike does not add browser automation or a committed test account. |
 | Azure Communication Services email | FAIL / smallest fix disclosed | Existing Edge Function supports Resend, SendGrid, SMTP relay, and console only. ACS Email REST requires a dedicated provider adapter and sender-domain/API configuration; no credentials are used in this local spike. |
 | Local email delivery | PASS (console boundary only) | Existing `email` Edge Function's console provider is credential-free and reports a terminal success result; ACS delivery cannot be claimed. |
-| Stripe | OUT OF SCOPE | No Stripe keys or payment acceptance test used. |
+| Stripe | NOT PROVEN | Checkout and webhook code now enforce test-mode by default, verify signed events, deduplicate event IDs, and map subscription statuses through directly tested production helpers. Real test-mode Checkout, Stripe delivery, and deployment secrets are intentionally not proven until the deployment slice. |
 
 ## Verdict
 
@@ -44,6 +44,10 @@ spike cannot be called an end-to-end production-readiness PASS because browser
 journey evidence and ACS delivery are not provable without adding browser
 automation and the smallest ACS provider adapter/configuration. No payment
 acceptance claim is made.
+
+Stripe test-mode Checkout is **NOT PROVEN until the deployment slice**. This
+branch uses no Stripe credentials; hosted Checkout, deployed Edge Function
+secrets, and a real signed Stripe delivery must be exercised there.
 
 The waitlist promotion defect found during this spike was fixed at the shared
 database trigger boundary, rather than papered over in the harness.
