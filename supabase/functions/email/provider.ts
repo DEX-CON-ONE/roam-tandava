@@ -1,5 +1,7 @@
 import { parseAcsConnectionString, sendAcsEmail } from "./acs.ts";
 
+declare const Deno: { env: { get(name: string): string | undefined } };
+
 /**
  * Email Provider Abstraction
  *

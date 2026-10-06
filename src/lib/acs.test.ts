@@ -40,6 +40,23 @@ describe("ACS REST email provider", () => {
     expect(parseAcsConnectionString("endpoint=https://example.com;accesskey=not-base64!")).toBeNull();
   });
 
+  it("reports unconfigured ACS without making a network request", async () => {
+    const runtime = globalThis as typeof globalThis & { Deno?: { env: { get(name: string): string | undefined } } };
+    const savedDeno = runtime.Deno;
+    const savedFetch = globalThis.fetch;
+    const fetchMock = vi.fn();
+    runtime.Deno = { env: { get: (name: string) => ({ EMAIL_PROVIDER: "acs" } as Record<string, string>)[name] } };
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    try {
+      await expect(sendEmail(message)).resolves.toEqual({ success: false, error: "ACS email provider not configured", provider: "acs" });
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      globalThis.fetch = savedFetch;
+      runtime.Deno = savedDeno;
+    }
+  });
+
   it("returns a recoverable safe failure when the ACS provider throws", async () => {
     const runtime = globalThis as typeof globalThis & { Deno?: { env: { get(name: string): string | undefined } } };
     const savedDeno = runtime.Deno;
