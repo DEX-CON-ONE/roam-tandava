@@ -1,3 +1,5 @@
+import { parseAcsConnectionString, sendAcsEmail } from "./acs.ts";
+
 /**
  * Email Provider Abstraction
  *
@@ -79,6 +81,20 @@ function createResendProvider(): EmailProviderAdapter {
 
       const data = await response.json();
       return { success: true, messageId: data.id, provider: "resend" };
+    },
+  };
+}
+
+function createAcsProvider(): EmailProviderAdapter {
+  const config = parseAcsConnectionString(Deno.env.get("AZURE_COMMUNICATION_CONNECTION_STRING"));
+  const from = Deno.env.get("AZURE_COMMUNICATION_SENDER_EMAIL");
+
+  return {
+    name: "acs",
+    async send(message) {
+      if (!config || !from) return { success: false, error: "ACS email provider not configured", provider: "acs" };
+      const result = await sendAcsEmail(config, from, message);
+      return { success: true, messageId: result.id, provider: "acs" };
     },
   };
 }
@@ -189,6 +205,8 @@ function getProvider(): EmailProviderAdapter {
   const provider = (Deno.env.get("EMAIL_PROVIDER") || "console").toLowerCase();
 
   switch (provider) {
+    case "acs":
+      return createAcsProvider();
     case "resend":
       return createResendProvider();
     case "sendgrid":

@@ -47,3 +47,11 @@ acceptance claim is made.
 
 The waitlist promotion defect found during this spike was fixed at the shared
 database trigger boundary, rather than papered over in the harness.
+
+## ACS email provider decision (issue #6)
+
+The Supabase Edge Function uses a signed Azure Communication Services Email REST request via the runtime `fetch` and Web Crypto APIs. The Node-oriented `@azure/communication-email` package is not used. Configure `EMAIL_PROVIDER=acs`, `AZURE_COMMUNICATION_CONNECTION_STRING`, and `AZURE_COMMUNICATION_SENDER_EMAIL` in the Supabase function environment; no credential belongs in this repository.
+
+The adapter polls the send operation and reports success only for the exact terminal status `Succeeded`. `Failed`, `Canceled`, unknown states, HTTP errors, and a polling timeout all fail the send.
+
+Automated tests mock `fetch` and use no credentials. Real delivery to a mailbox is **not proven** by this implementation; it requires the deployment slice (#9), with the connection string supplied through the approved secret path.

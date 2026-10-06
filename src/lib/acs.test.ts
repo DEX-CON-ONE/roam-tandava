@@ -1,0 +1,41 @@
+import { describe, expect, it, vi } from "vitest";
+import { acsAuthorization, parseAcsConnectionString, sendAcsEmail } from "../../supabase/functions/email/acs.ts";
+
+const config = parseAcsConnectionString("endpoint=https://example.communication.azure.com/;accesskey=a2V5")!;
+const message = { to: "recipient@example.com", subject: "Subject", text: "Text", html: "<p>Text</p>" };
+
+function fetchFor(statuses: string[], sendStatus = 202): typeof fetch {
+  let index = 0;
+  return vi.fn(async () => {
+    if (index++ === 0) return new Response(JSON.stringify({ id: "operation_1" }), { status: sendStatus });
+    return new Response(JSON.stringify({ status: statuses.shift() }), { status: 200 });
+  }) as typeof fetch;
+}
+
+describe("ACS REST email provider", () => {
+  it("signs the documented canonical string with Web Crypto", async () => {
+    const signed = await acsAuthorization("GET", "/emails/operations/op?api-version=2023-03-31", "", config, "Mon, 06 Oct 2025 12:00:00 GMT");
+    const expected = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(""));
+    const hash = btoa(String.fromCharCode(...new Uint8Array(expected)));
+    const key = await crypto.subtle.importKey("raw", new TextEncoder().encode("key"), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    const canonical = `GET\n/emails/operations/op?api-version=2023-03-31\nMon, 06 Oct 2025 12:00:00 GMT;example.communication.azure.com;${hash}`;
+    const expectedSignature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(canonical));
+    expect(signed.contentHash).toBe(hash);
+    expect(signed.authorization).toBe(`HMAC-SHA256 SignedHeaders=x-ms-date;host;x-ms-content-sha256&Signature=${btoa(String.fromCharCode(...new Uint8Array(expectedSignature)))}`);
+  });
+
+  it("accepts only Succeeded and treats failed, canceled, unknown, and timeout as failures", async () => {
+    await expect(sendAcsEmail(config, "sender@example.com", message, fetchFor(["Running", "Succeeded"]), undefined, async () => {})).resolves.toEqual({ id: "operation_1" });
+    for (const status of ["Failed", "Canceled", "Queued"]) {
+      await expect(sendAcsEmail(config, "sender@example.com", message, fetchFor([status]), undefined, async () => {})).rejects.toThrow();
+    }
+    await expect(sendAcsEmail(config, "sender@example.com", message, fetchFor(["Running"]), undefined, async () => {}, 0)).rejects.toThrow("timed out");
+    await expect(sendAcsEmail(config, "sender@example.com", message, fetchFor([], 500))).rejects.toThrow("send request failed");
+  });
+
+  it("rejects missing or malformed connection strings", () => {
+    expect(parseAcsConnectionString(undefined)).toBeNull();
+    expect(parseAcsConnectionString("endpoint=http://example.com;accesskey=key")).toBeNull();
+    expect(parseAcsConnectionString("endpoint=https://example.com;accesskey=not-base64!")).toBeNull();
+  });
+});
