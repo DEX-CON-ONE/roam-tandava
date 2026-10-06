@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { acsAuthorization, parseAcsConnectionString, sendAcsEmail } from "../../supabase/functions/email/acs.ts";
+import { sendEmail } from "../../supabase/functions/email/provider.ts";
 
 const config = parseAcsConnectionString("endpoint=https://example.communication.azure.com/;accesskey=a2V5")!;
 const message = { to: "recipient@example.com", subject: "Subject", text: "Text", html: "<p>Text</p>" };
@@ -37,5 +38,33 @@ describe("ACS REST email provider", () => {
     expect(parseAcsConnectionString(undefined)).toBeNull();
     expect(parseAcsConnectionString("endpoint=http://example.com;accesskey=key")).toBeNull();
     expect(parseAcsConnectionString("endpoint=https://example.com;accesskey=not-base64!")).toBeNull();
+  });
+
+  it("returns a recoverable safe failure when the ACS provider throws", async () => {
+    const runtime = globalThis as typeof globalThis & { Deno?: { env: { get(name: string): string | undefined } } };
+    const savedDeno = runtime.Deno;
+    const savedFetch = globalThis.fetch;
+    const secret = "fake-private-access-key";
+    const recipient = "private-recipient@example.com";
+    const subject = "private subject";
+    const html = "private body";
+    runtime.Deno = { env: { get: (name: string) => ({
+      EMAIL_PROVIDER: "acs",
+      AZURE_COMMUNICATION_CONNECTION_STRING: `endpoint=https://example.communication.azure.com/;accesskey=${btoa("fake-key")}`,
+      AZURE_COMMUNICATION_SENDER_EMAIL: "sender@example.com",
+    } as Record<string, string>)[name] } };
+    globalThis.fetch = vi.fn(async () => { throw new Error(`${secret} ${recipient} ${subject} ${html}`); }) as typeof fetch;
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      const result = await sendEmail({ to: recipient, subject, html });
+      expect(result).toEqual({ success: false, error: "ACS email delivery failed", provider: "acs" });
+      expect(logged).not.toHaveBeenCalled();
+      expect(JSON.stringify(result)).not.toMatch(new RegExp(`${secret}|${recipient}|${subject}|${html}`));
+    } finally {
+      logged.mockRestore();
+      globalThis.fetch = savedFetch;
+      runtime.Deno = savedDeno;
+    }
   });
 });

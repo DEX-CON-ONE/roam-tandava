@@ -93,8 +93,13 @@ function createAcsProvider(): EmailProviderAdapter {
     name: "acs",
     async send(message) {
       if (!config || !from) return { success: false, error: "ACS email provider not configured", provider: "acs" };
-      const result = await sendAcsEmail(config, from, message);
-      return { success: true, messageId: result.id, provider: "acs" };
+      try {
+        const result = await sendAcsEmail(config, from, message);
+        return { success: true, messageId: result.id, provider: "acs" };
+      } catch {
+        // Provider/runtime errors can include request details; keep them out of results and logs.
+        return { success: false, error: "ACS email delivery failed", provider: "acs" };
+      }
     },
   };
 }

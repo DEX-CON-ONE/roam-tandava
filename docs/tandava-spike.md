@@ -34,7 +34,7 @@ the same `book_class`/`cancel_booking` database contracts used by the app.
 | Authenticated app journey | NOT PROVABLE | The local database/RPC path is covered, but this spike does not add browser automation or a committed test account. |
 | Azure Communication Services email | FAIL / smallest fix disclosed | Existing Edge Function supports Resend, SendGrid, SMTP relay, and console only. ACS Email REST requires a dedicated provider adapter and sender-domain/API configuration; no credentials are used in this local spike. |
 | Local email delivery | PASS (console boundary only) | Existing `email` Edge Function's console provider is credential-free and reports a terminal success result; ACS delivery cannot be claimed. |
-| Stripe | OUT OF SCOPE | No Stripe keys or payment acceptance test used. |
+| Stripe | NOT PROVEN | Checkout and webhook code now enforce test-mode by default, verify signed events, deduplicate event IDs, and map subscription statuses through directly tested production helpers. Real test-mode Checkout, Stripe delivery, and deployment secrets are intentionally not proven until the deployment slice. |
 
 ## Verdict
 
@@ -44,6 +44,10 @@ spike cannot be called an end-to-end production-readiness PASS because browser
 journey evidence and ACS delivery are not provable without adding browser
 automation and the smallest ACS provider adapter/configuration. No payment
 acceptance claim is made.
+
+Stripe test-mode Checkout is **NOT PROVEN until the deployment slice**. This
+branch uses no Stripe credentials; hosted Checkout, deployed Edge Function
+secrets, and a real signed Stripe delivery must be exercised there.
 
 The waitlist promotion defect found during this spike was fixed at the shared
 database trigger boundary, rather than papered over in the harness.
@@ -55,3 +59,31 @@ The Supabase Edge Function uses a signed Azure Communication Services Email REST
 The adapter polls the send operation and reports success only for the exact terminal status `Succeeded`. `Failed`, `Canceled`, unknown states, HTTP errors, and a polling timeout all fail the send.
 
 Automated tests mock `fetch` and use no credentials. Real delivery to a mailbox is **not proven** by this implementation; it requires the deployment slice (#9), with the connection string supplied through the approved secret path.
+## Issue #7 Roam fixture and walkthrough
+
+Migration `00020_roam_local_seed.sql` creates the local-only `ROAM Athletic Club`
+fixture. It is rerunnable and uses only published Roam facts:
+
+- Farnham Park, GU35 9LW
+- UNDEFEATED: Wednesday 09:30 and Saturday 08:30
+- HYBRID, X4, and Farnham Park Outdoor Training offerings
+- Personal Training is not seeded as bookable
+
+Prices, instructors, and other unpublished commercial details remain unknown
+rather than being invented. The schema's existing duration and capacity defaults
+are local database defaults only; this fixture does not claim them as Roam facts.
+
+The browser walkthrough (sign-in → pick class → book → cancel outside/inside the
+window → full class → waitlist), including sanitized `1280x800` and `390x844`
+screenshots, is deferred to issue #9. It is not acceptance evidence for this
+local fixture PR and is intentionally not reproduced with credentials or
+fabricated screenshots here.
+
+| Journey evidence | Status | Owner |
+| --- | --- | --- |
+| Browser walkthrough and sanitized desktop/mobile screenshots | DEFERRED to #9 | Mothership/deployed app |
+
+The fork's existing `ThemeContext`/CSS custom-property boundary is used. Roam's
+approved site values are applied through the seeded studio record: primary
+`#b66d3b`, secondary `#313b32`, and Josefin Sans. The canonical Roam logo is
+not altered or copied into this fork.
