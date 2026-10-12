@@ -68,6 +68,8 @@ const InstructorDetail = lazy(() => import("./pages/InstructorDetail"));
 const OnDemand = lazy(() => import("./pages/OnDemand"));
 const Login = lazy(() => import("./pages/auth/Login"));
 const Register = lazy(() => import("./pages/auth/Register"));
+const ResetPassword = lazy(() => import("./pages/auth/ResetPassword"));
+const ResetPasswordConfirm = lazy(() => import("./pages/auth/ResetPasswordConfirm"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const Demo = lazy(() => import("./pages/Demo"));
 const OpenSource = lazy(() => import("./pages/OpenSource"));
@@ -188,6 +190,8 @@ const App = () => (
                   {/* ---- Auth routes ---- */}
                   <Route path="/auth/login" element={<Login />} />
                   <Route path="/auth/register" element={<Register />} />
+                  <Route path="/auth/reset" element={<ResetPassword />} />
+                  <Route path="/auth/reset-confirm" element={<ResetPasswordConfirm />} />
                   <Route path="/auth/callback" element={<AuthCallback />} />
 
                   {/* ---- Authenticated member routes ---- */}

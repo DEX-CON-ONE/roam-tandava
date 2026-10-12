@@ -13,6 +13,7 @@
  * All in one SDK with zero custom backend code.
  */
 
+import { passwordResetRedirectUrl } from "@/lib/auth/password-reset";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
 import type {
@@ -115,8 +116,13 @@ const supabaseAuth: AuthProvider = {
 
   async resetPassword(email) {
     const { error } = await getClient().auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth/reset-confirm`,
+      redirectTo: passwordResetRedirectUrl(window.location.origin),
     });
+    return { error: mapError(error) };
+  },
+
+  async updatePassword(password) {
+    const { error } = await getClient().auth.updateUser({ password });
     return { error: mapError(error) };
   },
 
