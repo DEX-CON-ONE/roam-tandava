@@ -9,11 +9,13 @@
  * All product names, logos, and brands are property of their respective owners.
  */
 
+import { brand } from "../../config/brand";
+
 // ============================================================================
 // LEGAL DISCLAIMERS
 // ============================================================================
 
-export const CONNECTOR_LEGAL_NOTICE = `
+const UPSTREAM_LEGAL_NOTICE = `
 **Data Import Disclaimer**
 
 Tandava provides import tools to help you migrate YOUR OWN data from other
@@ -33,10 +35,39 @@ These import tools are provided "as is" for data portability purposes under
 applicable data protection regulations (e.g., GDPR Article 20, CCPA).
 `.trim();
 
-export const CONNECTOR_SHORT_DISCLAIMER = `
+const UPSTREAM_SHORT_DISCLAIMER = `
 Tandava is not affiliated with this provider. Import tools are provided for
 data portability purposes only. All trademarks are property of their respective owners.
 `.trim();
+
+// White-labelled builds: the same substance, with no claim about who the
+// operator is and no statement made in the operator's name.
+const NEUTRAL_LEGAL_NOTICE = `
+**Data Import Notice**
+
+These import tools help you move YOUR OWN data from other studio management
+platforms. By using them, you confirm that:
+
+1. You have the legal right to export and import this data
+2. The data belongs to you or your business
+3. You are not violating any terms of service or data protection laws
+4. You have obtained any necessary consent from data subjects (e.g., members)
+
+All product names, logos, and brands mentioned are trademarks of their
+respective owners. No affiliation with, or endorsement by, any of the
+platforms listed below is implied.
+
+These import tools are provided "as is" for data portability purposes under
+applicable data protection regulations (e.g., GDPR Article 20, CCPA).
+`.trim();
+
+const NEUTRAL_SHORT_DISCLAIMER = `
+Import tools are provided for data portability purposes only. No affiliation
+with this provider is implied. All trademarks are property of their respective owners.
+`.trim();
+
+export const CONNECTOR_LEGAL_NOTICE = brand.isCustom ? NEUTRAL_LEGAL_NOTICE : UPSTREAM_LEGAL_NOTICE;
+export const CONNECTOR_SHORT_DISCLAIMER = brand.isCustom ? NEUTRAL_SHORT_DISCLAIMER : UPSTREAM_SHORT_DISCLAIMER;
 
 // ============================================================================
 // PROVIDER METADATA

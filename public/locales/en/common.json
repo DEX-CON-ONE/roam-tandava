@@ -128,5 +128,13 @@
     "fillRequired": "Please fill in the subject and message.",
     "failedToSend": "Failed to send",
     "somethingWentWrong": "Something went wrong. Please try again."
+  },
+  "notAvailable": {
+    "title": "Not available yet",
+    "body": "This part of {{brandName}} is still being set up. Please check back soon.",
+    "studioSetup": "Open studio setup",
+    "backToSite": "Back to {{brandName}}",
+    "signOut": "Sign out",
+    "signIn": "Sign in"
   }
 }

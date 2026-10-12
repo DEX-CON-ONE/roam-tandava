@@ -19,6 +19,8 @@ import {
   ShieldCheck, Upload, CreditCard, Rocket, Check, ChevronRight,
   SkipForward, ExternalLink, CheckCircle2, Circle, Plus, Trash2, Loader2,
 } from "lucide-react";
+import { brand } from "@/config/brand";
+import { LIVE_DATA_ONLY } from "@/config/live-screens";
 
 const STEPS = [
   { key: "studio", label: "Studio Info", icon: Building2 },
@@ -125,7 +127,7 @@ export default function Onboarding() {
   const [done, setDone] = useState<Set<number>>(new Set());
   const [f, setF] = useState<Record<string, string>>({
     timezone: "America/Los_Angeles", currency: "USD", rooms: "Main Studio, Hot Room",
-    classStyle: "vinyasa", classLevel: "all", classDuration: "60", classCapacity: "25",
+    classStyle: "General", classLevel: "all", classDuration: "60", classCapacity: "25",
     classPrice: "25", schedDay: "monday", schedTime: "09:00", memberCycle: "monthly",
     packClasses: "10", waiverName: "Liability Waiver",
     primaryColor: "#4fd1c5", secondaryColor: "#f687b3",
@@ -370,8 +372,8 @@ export default function Onboarding() {
     }
     setLaunching(false);
     try { localStorage.removeItem(DRAFT_KEY); } catch { /* best-effort */ }
-    toast({ title: "Studio launched!", description: "Your studio is now live. Welcome to Tandava!" });
-    if (isBackendConfigured()) navigate("/manage");
+    toast({ title: "Studio launched!", description: `Your studio is now live. Welcome to ${brand.name}!` });
+    if (isBackendConfigured()) navigate(LIVE_DATA_ONLY ? "/manage/import" : "/manage");
   };
 
   const updateStaff = (i: number, key: keyof StaffRow, value: string) =>
@@ -392,7 +394,7 @@ export default function Onboarding() {
     switch (step) {
       case 0: return (
         <StepCard title="Studio Information" desc="Tell us about your studio to get started">
-          <Field label="Studio Name" id="studioName" placeholder="e.g. Tandava Yoga" value={f.studioName ?? ""} onChange={set("studioName")} />
+          <Field label="Studio Name" id="studioName" placeholder="e.g. Your studio name" value={f.studioName ?? ""} onChange={set("studioName")} />
           <div className="space-y-2">
             <Label htmlFor="studioDesc">Description</Label>
             <Textarea id="studioDesc" placeholder="A brief description of your studio..." value={f.studioDesc ?? ""} onChange={set("studioDesc")} rows={3} />
@@ -436,9 +438,9 @@ export default function Onboarding() {
       );
       case 3: return (
         <StepCard title="Create a Class Offering" desc="Define the types of classes you teach">
-          <Field label="Class Name" id="className" placeholder="e.g. Morning Vinyasa" value={f.className ?? ""} onChange={set("className")} />
+          <Field label="Class Name" id="className" placeholder="e.g. Morning Class" value={f.className ?? ""} onChange={set("className")} />
           <div className="grid grid-cols-2 gap-4">
-            <Sel label="Style" value={f.classStyle ?? ""} onChange={sel("classStyle")} options={[["vinyasa","Vinyasa"],["hatha","Hatha"],["yin","Yin"],["power","Power"],["restorative","Restorative"]]} />
+            <Field label="Category" id="classStyle" placeholder="e.g. General" value={f.classStyle ?? ""} onChange={set("classStyle")} />
             <Sel label="Level" value={f.classLevel ?? ""} onChange={sel("classLevel")} options={[["all","All Levels"],["beginner","Beginner"],["intermediate","Intermediate"],["advanced","Advanced"]]} />
           </div>
           <div className="grid grid-cols-3 gap-4">
@@ -455,7 +457,7 @@ export default function Onboarding() {
           )}
           <div className="grid grid-cols-2 gap-4">
             <Sel label="Offering" value={f.schedOffering ?? ""} onChange={sel("schedOffering")} placeholder="Select a class" options={offeringOptions} disabled={production && offeringOptions.length === 0} />
-            <Sel label="Teacher (optional)" value={f.schedTeacher ?? ""} onChange={sel("schedTeacher")} placeholder="Select a teacher" options={teacherOptions} disabled={production && teacherOptions.length === 0} />
+            <Sel label="Instructor (optional)" value={f.schedTeacher ?? ""} onChange={sel("schedTeacher")} placeholder="Select an instructor" options={teacherOptions} disabled={production && teacherOptions.length === 0} />
           </div>
           <div className="grid grid-cols-3 gap-4">
             <Sel label="Day" value={f.schedDay ?? ""} onChange={sel("schedDay")} options={DAYS.map((d) => [d.toLowerCase(), d])} />
@@ -488,7 +490,7 @@ export default function Onboarding() {
         </StepCard>
       );
       case 6: return (
-        <StepCard title="Add Your Team" desc="Invite teachers and staff — each gets an email invitation to join your studio">
+        <StepCard title="Add Your Team" desc="Invite instructors and staff — each gets an email invitation to join your studio">
           <div className="space-y-4">
             {staffList.map((member, i) => (
               <div key={i} className="rounded-xl border border-border p-4 space-y-4">
@@ -502,10 +504,10 @@ export default function Onboarding() {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <Field label="Full Name" id={`staffName-${i}`} placeholder="Maya Patel" value={member.name} onChange={(e) => updateStaff(i, "name", e.target.value)} />
-                  <Field label="Email" id={`staffEmail-${i}`} placeholder="maya@tandava.yoga" value={member.email} onChange={(e) => updateStaff(i, "email", e.target.value)} />
+                  <Field label="Email" id={`staffEmail-${i}`} placeholder="name@example.com" value={member.email} onChange={(e) => updateStaff(i, "email", e.target.value)} />
                 </div>
                 <div className="grid grid-cols-3 gap-4">
-                  <Sel label="Role" value={member.role} onChange={(v) => updateStaff(i, "role", v)} options={[["teacher","Teacher"],["sub","Substitute"],["admin","Admin"],["front_desk","Front Desk"]]} />
+                  <Sel label="Role" value={member.role} onChange={(v) => updateStaff(i, "role", v)} options={[["teacher","Instructor"],["sub","Substitute"],["admin","Admin"],["front_desk","Front Desk"]]} />
                   <Sel label="Pay Type" value={member.payType} onChange={(v) => updateStaff(i, "payType", v)} options={[["per_class","Per Class"],["hourly","Hourly"],["salary","Salary"]]} />
                   <Field label="Pay Rate ($)" id={`staffRate-${i}`} type="number" placeholder="75" value={member.payRate} onChange={(e) => updateStaff(i, "payRate", e.target.value)} />
                 </div>
@@ -522,8 +524,8 @@ export default function Onboarding() {
           <Field label="Waiver Name" id="waiverName" value={f.waiverName ?? ""} onChange={set("waiverName")} />
           <div className="space-y-2">
             <Label htmlFor="waiverContent">Waiver Content</Label>
-            <Textarea id="waiverContent" rows={8} placeholder="I acknowledge that yoga involves physical activity and that I participate at my own risk..." value={f.waiverContent ?? ""} onChange={set("waiverContent")} />
-            <p className="text-xs text-muted-foreground">Students will be required to agree to this waiver before booking.</p>
+            <Textarea id="waiverContent" rows={8} placeholder="I acknowledge that taking part involves physical activity and that I participate at my own risk..." value={f.waiverContent ?? ""} onChange={set("waiverContent")} />
+            <p className="text-xs text-muted-foreground">Members will be required to agree to this waiver before booking.</p>
           </div>
         </StepCard>
       );
@@ -574,7 +576,7 @@ export default function Onboarding() {
               <Switch checked={discoverable} onCheckedChange={setDiscoverable} />
               <div>
                 <Label>List my studio in the public directory</Label>
-                <p className="text-xs text-muted-foreground">Students browsing Tandava can find and book your classes.</p>
+                <p className="text-xs text-muted-foreground">People browsing {brand.name} can find and book your classes.</p>
               </div>
             </div>
             <Separator />

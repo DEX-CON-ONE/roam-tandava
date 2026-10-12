@@ -41,6 +41,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useTranslation } from "react-i18next";
 import { brand } from "@/config/brand";
 import { BrandMark } from "@/components/BrandMark";
+import { LIVE_DATA_ONLY, isLiveRoute } from "@/config/live-screens";
 
 interface ManageLayoutProps {
   children: ReactNode;
@@ -69,9 +70,12 @@ const manageNavigation = [
   { nameKey: "settings", href: "/manage/settings", icon: Settings },
 ];
 
+// Live-data-only builds list only the sections that use real data.
+const visibleManageNavigation = LIVE_DATA_ONLY ? manageNavigation.filter((item) => isLiveRoute(item.href)) : manageNavigation;
+
 export function ManageLayout({ children }: ManageLayoutProps) {
   const location = useLocation();
-  const { profile } = useAuth();
+  const { profile, signOut } = useAuth();
   const { t } = useTranslation('manage');
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -99,11 +103,13 @@ export function ManageLayout({ children }: ManageLayoutProps) {
             >
               {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </Button>
+            {!LIVE_DATA_ONLY && (<>
             <Link to="/home" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
               <ChevronLeft className="h-4 w-4" />
               <span className="text-sm hidden sm:inline">{t('studentView')}</span>
             </Link>
             <div className="h-5 w-px bg-border mx-1" />
+            </>)}
             <Link to="/manage" className="flex items-center gap-2">
               <BrandMark size="sm" />
               <div className="hidden sm:block">
@@ -114,12 +120,14 @@ export function ManageLayout({ children }: ManageLayoutProps) {
           </div>
 
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" className="relative">
-              <Bell className="h-5 w-5" />
-              <span className="absolute -top-0.5 -end-0.5 h-4 w-4 rounded-full bg-accent-coral text-[9px] font-bold text-white flex items-center justify-center">
-                5
-              </span>
-            </Button>
+            {!LIVE_DATA_ONLY && (
+              <Button variant="ghost" size="icon" className="relative">
+                <Bell className="h-5 w-5" />
+                <span className="absolute -top-0.5 -end-0.5 h-4 w-4 rounded-full bg-accent-coral text-[9px] font-bold text-white flex items-center justify-center">
+                  5
+                </span>
+              </Button>
+            )}
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -140,21 +148,25 @@ export function ManageLayout({ children }: ManageLayoutProps) {
                   </div>
                 </div>
                 <DropdownMenuSeparator />
+                {!LIVE_DATA_ONLY && (
+                  <>
+                    <DropdownMenuItem asChild className="rounded-lg">
+                      <Link to="/account" className="flex items-center gap-2 cursor-pointer">
+                        <User className="h-4 w-4" />
+                        {t('myAccount')}
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild className="rounded-lg">
+                      <Link to="/manage/settings" className="flex items-center gap-2 cursor-pointer">
+                        <Settings className="h-4 w-4" />
+                        {t('studioSettings')}
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                  </>
+                )}
                 <DropdownMenuItem asChild className="rounded-lg">
-                  <Link to="/account" className="flex items-center gap-2 cursor-pointer">
-                    <User className="h-4 w-4" />
-                    {t('myAccount')}
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild className="rounded-lg">
-                  <Link to="/manage/settings" className="flex items-center gap-2 cursor-pointer">
-                    <Settings className="h-4 w-4" />
-                    {t('studioSettings')}
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem asChild className="rounded-lg">
-                  <Link to="/auth/login" className="flex items-center gap-2 cursor-pointer text-destructive">
+                  <Link to="/auth/login" onClick={() => void signOut()} className="flex items-center gap-2 cursor-pointer text-destructive">
                     <LogOut className="h-4 w-4" />
                     {t('signOut')}
                   </Link>
@@ -174,7 +186,7 @@ export function ManageLayout({ children }: ManageLayoutProps) {
           )}
         >
           <nav className="flex flex-col gap-1 p-3 h-full">
-            {manageNavigation.map((item) => (
+            {visibleManageNavigation.map((item) => (
               <Link
                 key={item.nameKey}
                 to={item.href}
