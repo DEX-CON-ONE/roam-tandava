@@ -208,5 +208,62 @@ VALUES (gen_random_uuid(), 'authpath@signup.example.test', '{"provider":"email"}
 SET LOCAL search_path = "$user", public, extensions;
 SELECT spike_assert((SELECT (first_name, last_name) = ('Path', 'Check') FROM profiles WHERE email = 'authpath@signup.example.test'), 'profile not created when the caller search_path is auth');
 
+-- Booking confirmation trigger (00023): queues a pg_net call once Vault is configured,
+-- only for confirmed bookings that did not come from Stripe Checkout.
+SELECT spike_assert(EXISTS (
+  SELECT 1 FROM pg_trigger WHERE tgname = 'bookings_notify_confirmed' AND tgrelid = 'public.bookings'::regclass AND NOT tgisinternal
+), 'bookings_notify_confirmed trigger is missing');
+SELECT spike_assert((SELECT COUNT(*) FROM net.http_request_queue) = 0, 'a request was queued although Vault is not configured');
+
+SELECT vault.create_secret('https://functions.example.test/functions/v1/booking-notifications', 'booking_notifications_url');
+SELECT vault.create_secret('spike-shared-secret', 'booking_notifications_secret');
+
+CREATE TEMP TABLE spike_notify (n INT PRIMARY KEY, occurrence UUID, booking UUID) ON COMMIT DROP;
+WITH created AS (
+  INSERT INTO class_occurrences (studio_id, offering_id, location_id, starts_at, ends_at, capacity)
+  SELECT o.studio_id, o.offering_id, o.location_id,
+         o.starts_at + make_interval(days => 30 + n), o.ends_at + make_interval(days => 30 + n), 20
+  FROM class_occurrences o, generate_series(1, 3) AS n
+  WHERE o.id = (SELECT occurrence_a FROM spike_ids)
+  RETURNING id, starts_at
+)
+INSERT INTO spike_notify (n, occurrence)
+SELECT ROW_NUMBER() OVER (ORDER BY starts_at), id FROM created;
+
+-- 1. Confirmed booking with no checkout transaction (membership / class pack path): queued.
+INSERT INTO bookings (studio_id, class_occurrence_id, profile_id, status)
+SELECT studio_a, (SELECT occurrence FROM spike_notify WHERE n = 1), member_a, 'confirmed' FROM spike_ids;
+UPDATE spike_notify SET booking = (SELECT id FROM bookings WHERE class_occurrence_id = spike_notify.occurrence) WHERE n = 1;
+SELECT spike_assert((SELECT COUNT(*) FROM net.http_request_queue) = 1, 'confirmed booking did not queue exactly one notification request');
+SELECT spike_assert((
+  SELECT q.url = 'https://functions.example.test/functions/v1/booking-notifications'
+     AND q.headers->>'Authorization' = 'Bearer spike-shared-secret'
+     AND (convert_from(q.body, 'UTF8')::jsonb->>'booking_id')::uuid = (SELECT booking FROM spike_notify WHERE n = 1)
+  FROM net.http_request_queue q
+), 'queued request does not carry the Vault URL, the shared secret and the booking id');
+
+-- 2. Waitlisted booking: not queued.
+INSERT INTO bookings (studio_id, class_occurrence_id, profile_id, status, waitlist_position)
+SELECT studio_a, (SELECT occurrence FROM spike_notify WHERE n = 2), member_a, 'waitlisted', 1 FROM spike_ids;
+-- 3. Drop-in booking created by the Stripe webhook (has a transaction): not queued here.
+INSERT INTO bookings (studio_id, class_occurrence_id, profile_id, status, transaction_id)
+SELECT studio_a, (SELECT occurrence FROM spike_notify WHERE n = 3), member_a, 'confirmed', gen_random_uuid() FROM spike_ids;
+SELECT spike_assert((SELECT COUNT(*) FROM net.http_request_queue) = 1, 'a waitlisted or checkout booking queued a notification request');
+
+-- The delivery log allows one email of each kind per booking.
+INSERT INTO notification_deliveries (studio_id, notification_type, channel, body, related_entity_type, related_entity_id)
+SELECT studio_a, 'booking_confirmation', 'email', 'spike', 'booking', (SELECT booking FROM spike_notify WHERE n = 1) FROM spike_ids;
+INSERT INTO notification_deliveries (studio_id, notification_type, channel, body, related_entity_type, related_entity_id)
+SELECT studio_a, 'studio_booking_notification', 'email', 'spike', 'booking', (SELECT booking FROM spike_notify WHERE n = 1) FROM spike_ids;
+DO $$
+BEGIN
+  BEGIN
+    INSERT INTO notification_deliveries (studio_id, notification_type, channel, body, related_entity_type, related_entity_id)
+    SELECT studio_a, 'booking_confirmation', 'email', 'spike again', 'booking', (SELECT booking FROM spike_notify WHERE n = 1) FROM spike_ids;
+    RAISE EXCEPTION 'SPIKE FAIL: a second booking confirmation could be claimed for the same booking';
+  EXCEPTION WHEN unique_violation THEN NULL;
+  END;
+END $$;
+
 SELECT 'PASS: RLS isolation, booking, capacity, double-booking, cancellation window, waitlist promotion, and entitlement consistency' AS result;
 ROLLBACK;
