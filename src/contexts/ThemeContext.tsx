@@ -16,6 +16,8 @@
  */
 
 import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
+import { brand } from "../config/brand";
+import { brandCssVariables } from "../config/brand-core";
 
 // ============================================================================
 // Theme definitions
@@ -29,7 +31,25 @@ export interface StudioTheme {
   cssVariables: Record<string, string>;
 }
 
+/**
+ * White-labelled builds (VITE_BRAND_COLOR_*) get their own palette as the
+ * first, default theme. Without brand colours the list is the upstream one.
+ */
+const BRAND_THEME: StudioTheme | null = Object.keys(brand.colors).length > 0
+  ? {
+      id: 'brand',
+      name: brand.name,
+      description: `The ${brand.name} look.`,
+      previewColors: [
+        brand.colors.background ?? '#ffffff', brand.colors.primary ?? '#000000',
+        brand.colors.accent ?? brand.colors.primary ?? '#000000', brand.colors.foreground ?? '#000000',
+      ],
+      cssVariables: brandCssVariables(brand),
+    }
+  : null;
+
 export const STARTER_THEMES: StudioTheme[] = [
+  ...(BRAND_THEME ? [BRAND_THEME] : []),
   {
     id: 'mystic-night',
     name: 'Mystic Night',
@@ -144,7 +164,7 @@ export interface StoredStudioBranding {
 }
 
 const DEFAULT_BRANDING: StudioBranding = {
-  themeId: 'mystic-night',
+  themeId: BRAND_THEME ? BRAND_THEME.id : 'mystic-night',
   logoUrl: null,
   primaryColorOverride: null,
   secondaryColorOverride: null,

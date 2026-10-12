@@ -10,9 +10,11 @@ import { ThemeProvider } from "@/contexts/ThemeContext";
 import { LocaleProvider } from "@/contexts/LocaleContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { AuthCallback } from "@/components/auth/AuthCallback";
+import { MarketingRoute } from "@/components/RootRedirect";
 // DemoPanel removed — role selection now happens on landing page + DemoRoleBar
 import { DemoRoleBar } from "@/components/DemoRoleBar";
 import { Component, lazy, Suspense, type ErrorInfo, type ReactNode } from "react";
+import { brand } from "@/config/brand";
 
 // ---------------------------------------------------------------------------
 // Error Boundary — shows the crash instead of a black screen
@@ -28,7 +30,7 @@ class AppErrorBoundary extends Component<
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error("[Tandava] Render crash:", error, info.componentStack);
+    console.error(`[${brand.name}] Render crash:`, error, info.componentStack);
   }
 
   render() {
@@ -37,7 +39,7 @@ class AppErrorBoundary extends Component<
         <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0f0a14", color: "#f5f0e8", fontFamily: "'DM Sans', sans-serif", padding: "2rem" }}>
           <div style={{ maxWidth: "32rem", textAlign: "center" }}>
             <h1 style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: "2rem", marginBottom: "1rem" }}>Something went wrong</h1>
-            <p style={{ opacity: 0.7, marginBottom: "1.5rem" }}>Tandava encountered an error during startup.</p>
+            <p style={{ opacity: 0.7, marginBottom: "1.5rem" }}>{brand.name} encountered an error during startup.</p>
             <pre style={{ textAlign: "left", background: "rgba(255,255,255,0.05)", padding: "1rem", borderRadius: "0.5rem", fontSize: "0.75rem", overflow: "auto", maxHeight: "12rem", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
               {this.state.error.message}
               {"\n\n"}
@@ -54,6 +56,9 @@ class AppErrorBoundary extends Component<
   }
 }
 
+// Platform marketing pages are left out of the bundle on single-studio builds
+// (VITE_ROOT_REDIRECT_URL); their routes redirect instead (see MarketingRoute).
+const NoPage = () => null;
 const Home = lazy(() => import("./pages/Home"));
 const StudioStorefront = lazy(() => import("./pages/StudioStorefront"));
 const Index = lazy(() => import("./pages/Index"));
@@ -71,12 +76,12 @@ const Register = lazy(() => import("./pages/auth/Register"));
 const ResetPassword = lazy(() => import("./pages/auth/ResetPassword"));
 const ResetPasswordConfirm = lazy(() => import("./pages/auth/ResetPasswordConfirm"));
 const NotFound = lazy(() => import("./pages/NotFound"));
-const Demo = lazy(() => import("./pages/Demo"));
-const OpenSource = lazy(() => import("./pages/OpenSource"));
-const StudioCalculator = lazy(() => import("./pages/tools/StudioCalculator"));
-const Blog = lazy(() => import("./pages/Blog"));
-const BlogCategory = lazy(() => import("./pages/blog/BlogCategory"));
-const BlogPost = lazy(() => import("./pages/blog/BlogPost"));
+const Demo = import.meta.env.VITE_ROOT_REDIRECT_URL ? NoPage : lazy(() => import("./pages/Demo"));
+const OpenSource = import.meta.env.VITE_ROOT_REDIRECT_URL ? NoPage : lazy(() => import("./pages/OpenSource"));
+const StudioCalculator = import.meta.env.VITE_ROOT_REDIRECT_URL ? NoPage : lazy(() => import("./pages/tools/StudioCalculator"));
+const Blog = import.meta.env.VITE_ROOT_REDIRECT_URL ? NoPage : lazy(() => import("./pages/Blog"));
+const BlogCategory = import.meta.env.VITE_ROOT_REDIRECT_URL ? NoPage : lazy(() => import("./pages/blog/BlogCategory"));
+const BlogPost = import.meta.env.VITE_ROOT_REDIRECT_URL ? NoPage : lazy(() => import("./pages/blog/BlogPost"));
 
 const ManageDashboard = lazy(() => import("./pages/manage/Dashboard"));
 const ScheduleManage = lazy(() => import("./pages/manage/ScheduleManage"));
@@ -164,9 +169,9 @@ const App = () => (
                        real platform landing / user's workspace in production
                        (see pages/Home.tsx). The demo role picker stays at /demo. ---- */}
                   <Route path="/" element={<Home />} />
-                  <Route path="/demo" element={<Demo />} />
-                  <Route path="/open-source" element={<OpenSource />} />
-                  <Route path="/tools/studio-calculator" element={<StudioCalculator />} />
+                  <Route path="/demo" element={<MarketingRoute><Demo /></MarketingRoute>} />
+                  <Route path="/open-source" element={<MarketingRoute><OpenSource /></MarketingRoute>} />
+                  <Route path="/tools/studio-calculator" element={<MarketingRoute><StudioCalculator /></MarketingRoute>} />
 
                   {/* ---- Public studio storefront (slug-driven; what per-studio
                        subdomains will render). Gated on studios.discoverable. ---- */}
@@ -174,9 +179,9 @@ const App = () => (
 
                   {/* ---- Blog (built but not yet linked in nav; noindex until
                        BLOG_PUBLISHED is flipped on in src/config/blog.ts) ---- */}
-                  <Route path="/blog" element={<Blog />} />
-                  <Route path="/blog/category/:category" element={<BlogCategory />} />
-                  <Route path="/blog/:slug" element={<BlogPost />} />
+                  <Route path="/blog" element={<MarketingRoute><Blog /></MarketingRoute>} />
+                  <Route path="/blog/category/:category" element={<MarketingRoute><BlogCategory /></MarketingRoute>} />
+                  <Route path="/blog/:slug" element={<MarketingRoute><BlogPost /></MarketingRoute>} />
 
                   {/* ---- Student-facing routes ---- */}
                   <Route path="/home" element={<Index />} />

@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Calendar, Clock, Flame, MapPin, ArrowRight, Loader2 } from "lucide-react";
+import { brand } from "@/config/brand";
 
 const CYCLE_LABEL: Record<string, string> = {
   weekly: "week",
@@ -237,9 +238,9 @@ function Shell({ children, studioName, accent }: { children: React.ReactNode; st
               className="flex h-8 w-8 items-center justify-center rounded-lg text-primary-foreground font-bold"
               style={{ backgroundColor: accent || "hsl(var(--primary))" }}
             >
-              {(studioName ?? "T").charAt(0)}
+              {(studioName ?? brand.name).charAt(0)}
             </span>
-            <span className="font-semibold tracking-tight">{studioName ?? "Tandava"}</span>
+            <span className="font-semibold tracking-tight">{studioName ?? brand.name}</span>
           </Link>
           <div className="flex items-center gap-2">
             <Button asChild variant="ghost" size="sm"><Link to="/auth/login">Sign in</Link></Button>
@@ -252,7 +253,11 @@ function Shell({ children, studioName, accent }: { children: React.ReactNode; st
       <main className="max-w-5xl mx-auto px-6 py-8">{children}</main>
       <footer className="border-t border-border mt-16">
         <div className="max-w-5xl mx-auto px-6 py-6 text-xs text-muted-foreground flex items-center gap-1.5">
-          <Calendar className="h-3.5 w-3.5" /> Powered by Tandava
+          {brand.isCustom ? (
+            <span>&copy; {new Date().getFullYear()} {studioName ?? brand.name}</span>
+          ) : (
+            <><Calendar className="h-3.5 w-3.5" /> Powered by Tandava</>
+          )}
         </div>
       </footer>
     </div>
@@ -274,7 +279,7 @@ function Empty({ title, body }: { title: string; body: string }) {
       <MapPin className="h-10 w-10 text-muted-foreground/40 mx-auto" />
       <h1 className="mt-4 text-xl font-semibold">{title}</h1>
       <p className="mt-1 text-sm text-muted-foreground max-w-sm mx-auto">{body}</p>
-      <Button asChild variant="outline" className="mt-6"><Link to="/">Back to Tandava</Link></Button>
+      <Button asChild variant="outline" className="mt-6"><Link to="/">Back to {brand.name}</Link></Button>
     </div>
   );
 }

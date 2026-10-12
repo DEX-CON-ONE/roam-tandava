@@ -10,6 +10,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Eye, EyeOff, Mail, Lock, User, ArrowRight, CheckCircle2, Sparkles, MailCheck, Store } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
+import { brand } from "@/config/brand";
+import { BrandMark } from "@/components/BrandMark";
 
 type RegistrationStep = "info" | "complete";
 
@@ -220,13 +222,11 @@ const Register = () => {
       <div className="hidden lg:flex flex-1 items-center justify-center bg-gradient-to-br from-primary/10 via-accent to-primary/5 p-12">
         <div className="max-w-md text-center">
           <div className="mb-8">
-            <div className="inline-flex h-20 w-20 items-center justify-center rounded-2xl bg-primary shadow-lg">
-              <span className="text-4xl font-bold text-primary-foreground">T</span>
-            </div>
+            <BrandMark size="lg" />
           </div>
-          <h2 className="text-3xl font-bold mb-4">{t('register.title')}</h2>
+          <h2 className="text-3xl font-bold mb-4">{brand.isCustom ? brand.name : t('register.title')}</h2>
           <p className="text-muted-foreground text-lg">
-            {t('register.subtitle')}
+            {brand.isCustom ? brand.tagline || brand.description : t('register.subtitle')}
           </p>
         </div>
       </div>
@@ -237,14 +237,11 @@ const Register = () => {
           {/* Logo - smaller on mobile */}
           <div className="text-center">
             <Link to="/" className="inline-flex items-center gap-2 mb-4 sm:mb-6">
-              <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-lg bg-primary">
-                <span className="text-lg sm:text-xl font-bold text-primary-foreground">T</span>
-              </div>
-              <span className="text-xl sm:text-2xl font-semibold tracking-tight">Tandava</span>
+              <BrandMark size="md" withName />
             </Link>
             <h1 className="text-xl sm:text-2xl font-bold tracking-tight">{t('register.createAccount')}</h1>
             <p className="text-sm sm:text-base text-muted-foreground mt-1 sm:mt-2">
-              {t('register.startJourney')}
+              {brand.isCustom ? brand.tagline || brand.description : t('register.startJourney')}
             </p>
           </div>
 

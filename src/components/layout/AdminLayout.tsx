@@ -12,6 +12,7 @@ import {
   Settings,
   ArrowLeft,
 } from "lucide-react";
+import { brand } from "@/config/brand";
 
 interface AdminLayoutProps {
   children: ReactNode;
@@ -49,7 +50,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
             Back to App
           </Link>
           <h2 className="text-lg font-bold tracking-tight">Platform Admin</h2>
-          <p className="text-xs text-muted-foreground">Manage your Tandava instance</p>
+          <p className="text-xs text-muted-foreground">Manage your {brand.name} instance</p>
         </div>
 
         <nav className="space-y-1 flex-1">
@@ -72,7 +73,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
 
         <div className="pt-4 border-t border-border">
           <p className="text-xs text-muted-foreground">
-            Instance: {import.meta.env.VITE_APP_NAME || "Tandava"}
+            Instance: {import.meta.env.VITE_APP_NAME || brand.name}
           </p>
         </div>
       </aside>

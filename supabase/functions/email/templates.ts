@@ -11,11 +11,22 @@
 // ---------------------------------------------------------------------------
 // Shared layout wrapper
 // ---------------------------------------------------------------------------
-const BRAND_COLOR = "#4fd1c5";
-const BG_COLOR = "#0f0a14";
-const CARD_BG = "#1a1520";
-const TEXT_COLOR = "#f5f0e8";
-const MUTED_COLOR = "#999";
+// Platform look and name. Override per deployment with function secrets
+// (EMAIL_BRAND_NAME, EMAIL_BRAND_COLOR, EMAIL_BG_COLOR, EMAIL_CARD_COLOR,
+// EMAIL_TEXT_COLOR, EMAIL_MUTED_COLOR, EMAIL_BUTTON_TEXT_COLOR); unset keeps the defaults.
+const envValue = (name: string): string | undefined => {
+  const deno = (globalThis as { Deno?: { env?: { get?: (key: string) => string | undefined } } }).Deno;
+  const value = deno?.env?.get?.(name)?.trim();
+  return value ? value : undefined;
+};
+const hex = (name: string, fallback: string) => (/^#[0-9a-f]{3,8}$/i.test(envValue(name) ?? "") ? envValue(name)! : fallback);
+const PLATFORM_NAME = envValue("EMAIL_BRAND_NAME");
+const BRAND_COLOR = hex("EMAIL_BRAND_COLOR", "#4fd1c5");
+const BG_COLOR = hex("EMAIL_BG_COLOR", "#0f0a14");
+const CARD_BG = hex("EMAIL_CARD_COLOR", "#1a1520");
+const TEXT_COLOR = hex("EMAIL_TEXT_COLOR", "#f5f0e8");
+const MUTED_COLOR = hex("EMAIL_MUTED_COLOR", "#999");
+const BUTTON_TEXT_COLOR = hex("EMAIL_BUTTON_TEXT_COLOR", BG_COLOR);
 
 /** Escape text that came from a database row or a user before putting it in HTML. */
 function esc(value: unknown): string {
@@ -29,8 +40,9 @@ function esc(value: unknown): string {
  *   platform-level mail (welcome, password reset), which keeps the default.
  */
 function layout(body: string, brand?: string): string {
-  const header = brand ? esc(brand) : "tandava";
-  const footer = brand ? `Sent on behalf of ${esc(brand)}` : "Sent by Tandava &mdash; Your yoga practice companion";
+  const name = brand || PLATFORM_NAME;
+  const header = name ? esc(name) : "tandava";
+  const footer = name ? `Sent on behalf of ${esc(name)}` : "Sent by Tandava &mdash; Your yoga practice companion";
   return `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
@@ -60,7 +72,7 @@ function layout(body: string, brand?: string): string {
 function button(text: string, url: string): string {
   return `<table cellpadding="0" cellspacing="0" style="margin:24px 0;">
   <tr><td style="background:${BRAND_COLOR};border-radius:8px;padding:14px 32px;">
-    <a href="${url}" style="color:${BG_COLOR};text-decoration:none;font-weight:600;font-size:16px;">${text}</a>
+    <a href="${url}" style="color:${BUTTON_TEXT_COLOR};text-decoration:none;font-weight:600;font-size:16px;">${text}</a>
   </td></tr>
 </table>`;
 }
@@ -81,10 +93,10 @@ export function welcomeEmail(data: {
   appUrl: string;
 }): TemplateResult {
   return {
-    subject: `Welcome to Tandava, ${data.firstName}!`,
+    subject: `Welcome to ${PLATFORM_NAME ?? "Tandava"}, ${data.firstName}!`,
     html: layout(`
       <h1 style="color:${TEXT_COLOR};font-size:24px;margin:0 0 16px;">Welcome, ${data.firstName}!</h1>
-      <p>We're excited to have you join our yoga community. Here's what you can do next:</p>
+      <p>We're excited to have you join ${PLATFORM_NAME ? "us" : "our yoga community"}. Here's what you can do next:</p>
       <ul style="padding-left:20px;">
         <li>Browse studios and find classes near you</li>
         <li>Book your first class</li>
@@ -93,7 +105,7 @@ export function welcomeEmail(data: {
       ${button("Explore Classes", `${data.appUrl}/schedule`)}
       <p style="color:${MUTED_COLOR};">If you have any questions, feel free to reach out through the app.</p>
     `),
-    text: `Welcome to Tandava, ${data.firstName}!\n\nWe're excited to have you join our yoga community.\n\nExplore classes: ${data.appUrl}/schedule`,
+    text: `Welcome to ${PLATFORM_NAME ?? "Tandava"}, ${data.firstName}!\n\nWe're excited to have you join ${PLATFORM_NAME ? "us" : "our yoga community"}.\n\nExplore classes: ${data.appUrl}/schedule`,
   };
 }
 

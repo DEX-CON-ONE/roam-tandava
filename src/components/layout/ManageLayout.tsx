@@ -13,6 +13,7 @@ import {
   FileBarChart,
   CalendarDays,
 } from "lucide-react";
+import { brand } from "@/config/brand";
 
 interface ManageLayoutProps {
   children: ReactNode;
@@ -45,7 +46,7 @@ export function ManageLayout({ children }: ManageLayoutProps) {
       <aside className="w-64 border-e border-border bg-card/50 p-4 flex flex-col">
         <div className="mb-6">
           <h2 className="text-lg font-bold tracking-tight">Studio Manager</h2>
-          <p className="text-xs text-muted-foreground">Oxatl Yoga</p>
+          <p className="text-xs text-muted-foreground">{brand.isCustom ? brand.name : "Oxatl Yoga"}</p>
         </div>
 
         <nav className="space-y-1 flex-1">

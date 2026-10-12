@@ -9,6 +9,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { SEOHead } from "@/components/seo/SEOHead";
 import { Eye, EyeOff, Mail, Lock } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { brand } from "@/config/brand";
+import { BrandMark } from "@/components/BrandMark";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -68,17 +70,14 @@ const Login = () => {
 
   return (
     <div className="min-h-screen flex">
-      <SEOHead title="Sign In" description="Sign in to your Tandava account to book classes, track your practice, and connect with your yoga community." canonical="/auth/login" noindex />
+      <SEOHead title="Sign In" description={brand.isCustom ? `Sign in to your ${brand.name} account.` : "Sign in to your Tandava account to book classes, track your practice, and connect with your yoga community."} canonical="/auth/login" noindex />
       {/* Left side - Form */}
       <div className="flex-1 flex items-center justify-center p-8">
         <div className="w-full max-w-md space-y-8">
           {/* Logo */}
           <div className="text-center">
             <Link to="/" className="inline-flex items-center gap-2 mb-8">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
-                <span className="text-xl font-bold text-primary-foreground">T</span>
-              </div>
-              <span className="text-2xl font-semibold tracking-tight">Tandava</span>
+              <BrandMark size="md" withName />
             </Link>
             <h1 className="text-2xl font-bold tracking-tight">{t('welcomeBack')}</h1>
             <p className="text-muted-foreground mt-2">
@@ -215,13 +214,11 @@ const Login = () => {
       <div className="hidden lg:flex flex-1 items-center justify-center bg-gradient-to-br from-primary/10 via-accent to-primary/5 p-12">
         <div className="max-w-md text-center">
           <div className="mb-8">
-            <div className="inline-flex h-20 w-20 items-center justify-center rounded-2xl bg-primary shadow-lg">
-              <span className="text-4xl font-bold text-primary-foreground">T</span>
-            </div>
+            <BrandMark size="lg" />
           </div>
-          <h2 className="text-3xl font-bold mb-4">{t('practiceAwaits')}</h2>
+          <h2 className="text-3xl font-bold mb-4">{brand.isCustom ? brand.name : t('practiceAwaits')}</h2>
           <p className="text-muted-foreground text-lg">
-            {t('practiceAwaitsDesc')}
+            {brand.isCustom ? brand.tagline || brand.description : t('practiceAwaitsDesc')}
           </p>
         </div>
       </div>

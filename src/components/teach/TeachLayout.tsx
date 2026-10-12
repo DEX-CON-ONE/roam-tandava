@@ -25,6 +25,8 @@ import {
   Settings,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { brand } from "@/config/brand";
+import { BrandMark } from "@/components/BrandMark";
 
 interface TeachLayoutProps {
   children: ReactNode;
@@ -77,16 +79,18 @@ export function TeachLayout({ children }: TeachLayoutProps) {
               )}
             </Button>
             <Link to="/teach" className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-sage">
-                <span className="text-sm font-bold text-white">T</span>
-              </div>
+              {brand.isCustom ? (
+                <BrandMark size="sm" />
+              ) : (
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-sage">
+                  <span className="text-sm font-bold text-white">T</span>
+                </div>
+              )}
               <div className="hidden sm:block">
                 <p className="text-sm font-semibold leading-none">
                   Teacher Portal
                 </p>
-                <p className="text-xs text-muted-foreground">
-                  Oxatl Yoga
-                </p>
+                <p className="text-xs text-muted-foreground">{brand.isCustom ? brand.name : "Oxatl Yoga"}</p>
               </div>
             </Link>
           </div>
