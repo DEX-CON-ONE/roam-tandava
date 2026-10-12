@@ -17,6 +17,7 @@
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { withServiceRoleOnly } from "../_shared/service-auth.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import webpush from "https://esm.sh/web-push@3.6.7";
 
@@ -43,7 +44,8 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-serve(async (req) => {
+// Server-to-server only: the anon key and user sessions are refused (see _shared/service-auth.ts).
+serve(withServiceRoleOnly(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
   if (!vapidPublic || !vapidPrivate) return json({ error: "VAPID keys not configured" }, 503);
@@ -93,4 +95,4 @@ serve(async (req) => {
   }
 
   return json({ sent, pruned: stale.length });
-});
+}, () => Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"), corsHeaders));
