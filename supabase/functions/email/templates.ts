@@ -17,7 +17,20 @@ const CARD_BG = "#1a1520";
 const TEXT_COLOR = "#f5f0e8";
 const MUTED_COLOR = "#999";
 
-function layout(body: string): string {
+/** Escape text that came from a database row or a user before putting it in HTML. */
+function esc(value: unknown): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+/**
+ * @param brand Studio name to show in the header and footer. Omit for
+ *   platform-level mail (welcome, password reset), which keeps the default.
+ */
+function layout(body: string, brand?: string): string {
+  const header = brand ? esc(brand) : "tandava";
+  const footer = brand ? `Sent on behalf of ${esc(brand)}` : "Sent by Tandava &mdash; Your yoga practice companion";
   return `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
@@ -27,7 +40,7 @@ function layout(body: string): string {
       <table width="600" cellpadding="0" cellspacing="0" style="background:${CARD_BG};border-radius:16px;overflow:hidden;">
         <!-- Header -->
         <tr><td style="padding:32px 40px 16px;text-align:center;">
-          <span style="font-size:28px;font-weight:bold;color:${BRAND_COLOR};letter-spacing:1px;">tandava</span>
+          <span style="font-size:28px;font-weight:bold;color:${BRAND_COLOR};letter-spacing:1px;">${header}</span>
         </td></tr>
         <!-- Body -->
         <tr><td style="padding:16px 40px 32px;color:${TEXT_COLOR};font-size:16px;line-height:1.6;">
@@ -35,7 +48,7 @@ function layout(body: string): string {
         </td></tr>
         <!-- Footer -->
         <tr><td style="padding:24px 40px;border-top:1px solid rgba(255,255,255,0.1);text-align:center;color:${MUTED_COLOR};font-size:12px;">
-          <p style="margin:0;">Sent by Tandava &mdash; Your yoga practice companion</p>
+          <p style="margin:0;">${footer}</p>
         </td></tr>
       </table>
     </td></tr>
@@ -98,18 +111,18 @@ export function bookingConfirmationEmail(data: {
   return {
     subject: `Booking Confirmed: ${data.className}`,
     html: layout(`
-      <h1 style="color:${TEXT_COLOR};font-size:24px;margin:0 0 16px;">You're booked, ${data.firstName}!</h1>
+      <h1 style="color:${TEXT_COLOR};font-size:24px;margin:0 0 16px;">You're booked, ${esc(data.firstName)}!</h1>
       <table cellpadding="0" cellspacing="0" style="width:100%;background:rgba(79,209,197,0.1);border-radius:12px;padding:20px;margin:16px 0;">
         <tr><td>
-          <p style="margin:0 0 8px;font-weight:600;font-size:18px;color:${BRAND_COLOR};">${data.className}</p>
-          <p style="margin:0 0 4px;color:${TEXT_COLOR};">${data.dateTime} &bull; ${data.duration} min</p>
-          <p style="margin:0 0 4px;color:${TEXT_COLOR};">with ${data.instructor}</p>
-          <p style="margin:0;color:${MUTED_COLOR};">${data.studioName} &bull; ${data.address}</p>
+          <p style="margin:0 0 8px;font-weight:600;font-size:18px;color:${BRAND_COLOR};">${esc(data.className)}</p>
+          <p style="margin:0 0 4px;color:${TEXT_COLOR};">${esc(data.dateTime)} &bull; ${data.duration} min</p>
+          <p style="margin:0 0 4px;color:${TEXT_COLOR};">with ${esc(data.instructor)}</p>
+          <p style="margin:0;color:${MUTED_COLOR};">${esc([data.studioName, data.address].filter(Boolean).join(" \u2022 "))}</p>
         </td></tr>
       </table>
       ${button("View My Schedule", `${data.appUrl}/my-schedule`)}
       <p style="color:${MUTED_COLOR};font-size:14px;">Need to cancel? You can manage your booking from your schedule.</p>
-    `),
+    `, data.studioName),
     text: `Booking Confirmed: ${data.className}\n\n${data.dateTime} - ${data.duration} min\nwith ${data.instructor}\n${data.studioName} - ${data.address}\n\nView schedule: ${data.appUrl}/my-schedule`,
   };
 }
@@ -227,5 +240,67 @@ export function studioInquiryNotificationEmail(data: {
       ${button("View in Inbox", data.manageUrl)}
     `),
     text: `New inquiry for ${data.studioName}\n\nSubject: ${data.messageSubject}\n${data.messageBody}\n\nFrom: ${data.senderName} (${data.senderEmail})\n\nView: ${data.manageUrl}`,
+  };
+}
+
+/** Purchase confirmation (class pack, membership or workshop paid through Checkout) */
+export function purchaseConfirmationEmail(data: {
+  firstName: string;
+  studioName: string;
+  itemName: string;
+  /** Already formatted, e.g. "£12.00". Empty to omit. */
+  amount: string;
+  appUrl: string;
+}): TemplateResult {
+  const amountLine = data.amount ? `Amount paid: ${data.amount}` : "";
+  return {
+    subject: `Payment confirmed: ${data.itemName} at ${data.studioName}`,
+    html: layout(`
+      <h1 style="color:${TEXT_COLOR};font-size:24px;margin:0 0 16px;">Thank you, ${esc(data.firstName)}!</h1>
+      <p>Your purchase from <strong>${esc(data.studioName)}</strong> is confirmed.</p>
+      <table cellpadding="0" cellspacing="0" style="width:100%;background:rgba(79,209,197,0.1);border-radius:12px;padding:20px;margin:16px 0;">
+        <tr><td>
+          <p style="margin:0 0 8px;font-weight:600;font-size:18px;color:${BRAND_COLOR};">${esc(data.itemName)}</p>
+          ${amountLine ? `<p style="margin:0;color:${TEXT_COLOR};">${esc(amountLine)}</p>` : ""}
+        </td></tr>
+      </table>
+      ${button("View My Account", `${data.appUrl}/account`)}
+      <p style="color:${MUTED_COLOR};font-size:14px;">Questions about this purchase? Just reply to this email.</p>
+    `, data.studioName),
+    text: `Payment confirmed: ${data.itemName} at ${data.studioName}\n\nThank you, ${data.firstName}!${amountLine ? `\n${amountLine}` : ""}\n\nView your account: ${data.appUrl}/account`,
+  };
+}
+
+/** New booking / new sale notification (sent to the studio's contact address) */
+export function studioSaleNotificationEmail(data: {
+  studioName: string;
+  kind: "booking" | "sale";
+  customerName: string;
+  customerEmail: string;
+  itemName: string;
+  /** Class date and time for a booking. Empty to omit. */
+  when: string;
+  /** Already formatted. Empty to omit. */
+  amount: string;
+  manageUrl: string;
+}): TemplateResult {
+  const title = data.kind === "booking" ? "New booking" : "New sale";
+  const details = [data.when, data.amount ? `Paid: ${data.amount}` : ""].filter(Boolean);
+  const from = data.customerEmail ? `${data.customerName} (${data.customerEmail})` : data.customerName;
+  return {
+    subject: `${title}: ${data.itemName} - ${data.customerName}`,
+    html: layout(`
+      <h1 style="color:${TEXT_COLOR};font-size:24px;margin:0 0 16px;">${title}</h1>
+      <p>${data.kind === "booking" ? "A customer has booked and paid online" : "A customer has paid online"} at <strong>${esc(data.studioName)}</strong>:</p>
+      <table cellpadding="0" cellspacing="0" style="width:100%;background:rgba(255,255,255,0.05);border-radius:12px;padding:20px;margin:16px 0;">
+        <tr><td>
+          <p style="margin:0 0 8px;font-weight:600;color:${TEXT_COLOR};">${esc(data.itemName)}</p>
+          ${details.map((line) => `<p style="margin:0 0 8px;color:${TEXT_COLOR};">${esc(line)}</p>`).join("")}
+          <p style="margin:0;color:${MUTED_COLOR};">From: ${esc(from)}</p>
+        </td></tr>
+      </table>
+      ${button("Open Studio Admin", data.manageUrl)}
+    `, data.studioName),
+    text: `${title} at ${data.studioName}\n\n${data.itemName}\n${details.length ? details.join("\n") + "\n" : ""}From: ${from}\n\nOpen studio admin: ${data.manageUrl}`,
   };
 }
