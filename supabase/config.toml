@@ -428,3 +428,8 @@ verify_jwt = true
 # Called by the database (pg_net trigger) with a dedicated shared secret, not a JWT.
 [functions.booking-notifications]
 verify_jwt = false
+
+# Stripe signs its own requests (no Supabase JWT); the function verifies the
+# Stripe signature itself. Without this, Stripe deliveries get 401.
+[functions.stripe-webhook]
+verify_jwt = false

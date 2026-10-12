@@ -31,6 +31,13 @@ export const LIVE_ROUTE_PATHS: readonly string[] = [
   "/auth/reset-confirm",
   "/auth/callback",
   "/embed/schedule/:slug", // public schedule widget: database
+  "/manage", // owner dashboard: manage_dashboard RPC
+  "/manage/schedule", // class types, weekly schedules, sessions
+  "/manage/sessions/:id", // session roster and attendance
+  "/manage/students", // members list and search
+  "/manage/members/:id", // one member: passes, bookings, payments
+  "/manage/offerings", // drop-in prices, class packs, memberships
+  "/manage/financials", // payments recorded by the Stripe webhook
   "/manage/onboarding", // studio setup wizard: onboarding Edge Function
   "/manage/import", // member import: import-members Edge Function
   "/manage/embed", // embed snippet generator: no records shown

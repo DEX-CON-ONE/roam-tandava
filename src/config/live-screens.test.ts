@@ -26,14 +26,27 @@ describe("live-data-only mode", () => {
 
   it("screens declared live do not carry page-level sample data", () => {
     // The files behind the live routes that render records.
-    for (const file of ["src/pages/StudioStorefront.tsx", "src/pages/member/StudioSchedule.tsx", "src/pages/member/ClassDetail.tsx", "src/pages/member/StudioPlans.tsx", "src/pages/member/MyBookings.tsx", "src/pages/member/CheckoutReturn.tsx", "src/pages/manage/Import.tsx", "src/pages/auth/Login.tsx", "src/pages/auth/Register.tsx"]) {
+    const ownerScreens = ["OwnerDashboard", "OwnerClasses", "OwnerSession", "OwnerMembers", "OwnerMemberDetail", "OwnerPrices", "OwnerPayments"].map((name) => `src/pages/owner/${name}.tsx`);
+    for (const file of ["src/pages/StudioStorefront.tsx", "src/pages/member/StudioSchedule.tsx", "src/pages/member/ClassDetail.tsx", "src/pages/member/StudioPlans.tsx", "src/pages/member/MyBookings.tsx", "src/pages/member/CheckoutReturn.tsx", "src/pages/manage/Import.tsx", "src/pages/auth/Login.tsx", "src/pages/auth/Register.tsx", ...ownerScreens]) {
       expect(source(file), file).not.toMatch(/^const (mock|MOCK|sample|SAMPLE)[A-Za-z_]*\s*[:=]/m);
     }
   });
 
+  it("studio setup sits behind the database access check, and every other manage route needs a studio permission", () => {
+    const setup = routes.find((route) => route.path === "/manage/onboarding");
+    expect(setup?.element).toBe("<ProtectedRoute><StudioSetupRoute><OnboardingManage /></StudioSetupRoute></ProtectedRoute>");
+    for (const { path, element } of routes.filter((route) => route.path.startsWith("/manage") && route.path !== "/manage/onboarding")) {
+      expect(element, `${path} must require a studio permission`).toMatch(/<ProtectedRoute permission="studio\.[a-z_]+">/);
+    }
+  });
+
   it("sample-only screens are left out of a live-data-only bundle", () => {
-    for (const name of ["Schedule", "Index", "ManageDashboard", "TeachersManage", "AuditLogsManage", "Kiosk"]) {
+    for (const name of ["Schedule", "Index", "ReportsManage", "TeachersManage", "AuditLogsManage", "Kiosk"]) {
       expect(app, name).toMatch(new RegExp(`const ${name} = import\\.meta\\.env\\.VITE_LIVE_DATA_ONLY === "true" \\? NoPage : lazy\\(`));
+    }
+    // Owner screens: the real one in a live-data-only bundle, the mock-up otherwise.
+    for (const name of ["ManageDashboard", "ScheduleManage", "StudentsManage", "OfferingsManage", "FinancialsManage", "MemberDetailManage"]) {
+      expect(app, name).toContain(`const ${name} = import.meta.env.VITE_LIVE_DATA_ONLY === "true" ? lazy(() => import("./pages/owner/Owner`);
     }
     for (const name of ["StudioStorefront", "MemberSchedule", "MemberClassDetail", "MemberPlans", "MemberBookings", "MemberCheckoutReturn", "Login", "Register", "OnboardingManage", "ImportManage"]) {
       expect(app, name).toMatch(new RegExp(`const ${name} = lazy\\(`));

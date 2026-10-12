@@ -21,7 +21,8 @@
     "test:editorial": "vitest run --config editorial/vitest.config.ts",
     "typecheck:editorial": "tsc -p editorial/tsconfig.json",
     "check:blog-game-build": "node scripts/check-blog-game-build.mjs",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:e2e:owner": "playwright test -c e2e/owner/playwright.config.ts"
   },
   "dependencies": {
     "@fontsource/dm-sans": "^5.2.8",

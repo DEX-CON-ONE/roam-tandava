@@ -293,5 +293,98 @@ SELECT spike_assert(jsonb_array_length((get_booking_options((SELECT occurrence F
 SELECT spike_assert((SELECT COUNT(*) FROM get_my_bookings('spike-a') WHERE occurrence_id = (SELECT occurrence FROM spike_rpc)) = 2, 'get_my_bookings did not return the member''s bookings');
 RESET ROLE;
 
-SELECT 'PASS: RLS isolation, booking, capacity, double-booking, cancellation window, waitlist promotion, and entitlement consistency' AS result;
+-- Owner admin (00031). Everything above runs as the database owner, which
+-- bypasses row level security. These run as the `authenticated` role, the way
+-- the API does: a policy that recurses (studio_staff used to) fails here.
+RESET ROLE;
+GRANT SELECT ON spike_ids TO authenticated;
+
+SELECT spike_as(owner_a) FROM spike_ids;
+SET LOCAL ROLE authenticated;
+SELECT spike_assert((SELECT COUNT(*) FROM studio_staff) = 1, 'owner cannot read their own staff row through RLS');
+SELECT spike_assert((SELECT COUNT(*) FROM profiles WHERE id = auth.uid()) = 1, 'owner cannot read their own profile through RLS');
+SELECT spike_assert((SELECT COUNT(*) FROM profiles) = 3, 'owner should see their own profile and the two studio A members');
+SELECT spike_assert((SELECT COUNT(*) FROM bookings WHERE studio_id = (SELECT studio_a FROM spike_ids)) > 0, 'owner cannot read studio bookings through RLS');
+SELECT spike_assert((manage_my_studio()->>'id')::uuid = (SELECT studio_a FROM spike_ids), 'manage_my_studio did not return the studio of its owner');
+INSERT INTO offerings (studio_id, name, slug) SELECT studio_a, 'Owner made', 'owner-made' FROM spike_ids;
+UPDATE offerings SET drop_in_price_cents = 1200 WHERE slug = 'owner-made';
+SELECT spike_assert((SELECT drop_in_price_cents FROM offerings WHERE slug = 'owner-made') = 1200, 'owner could not price their own class type');
+DELETE FROM offerings WHERE slug = 'owner-made';
+SELECT spike_assert((SELECT COUNT(*) FROM offerings WHERE slug = 'owner-made') = 1, 'a class type could be deleted through RLS');
+DO $$
+BEGIN
+  BEGIN
+    INSERT INTO offerings (studio_id, name, slug) SELECT studio_b, 'Not mine', 'not-mine' FROM spike_ids;
+    RAISE EXCEPTION 'SPIKE FAIL: owner of studio A created a class type in studio B';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+END $$;
+SELECT spike_assert((manage_create_weekly_schedule(
+  (SELECT offering_a FROM spike_ids), (SELECT location_a FROM spike_ids), NULL, 'monday', '09:00'
+)->>'sessions_created')::int BETWEEN 11 AND 13, 'a weekly schedule did not create about twelve weeks of sessions');
+SELECT spike_assert((SELECT COUNT(DISTINCT to_char(starts_at AT TIME ZONE 'America/New_York', 'ID HH24:MI')) FROM class_occurrences WHERE schedule_rule_id IS NOT NULL) = 1, 'weekly sessions are not all on the same weekday and studio-local time');
+SELECT spike_assert(manage_top_up_schedules((SELECT studio_a FROM spike_ids)) = 0, 'topping up a full schedule created duplicate sessions');
+
+RESET ROLE;
+SELECT spike_as(member_a) FROM spike_ids;
+SET LOCAL ROLE authenticated;
+SELECT spike_assert((SELECT COUNT(*) FROM studio_staff) = 0, 'a member can read the staff list');
+SELECT spike_assert((SELECT COUNT(*) FROM profiles) = 1, 'a member can read the profiles of other people');
+SELECT spike_assert(manage_my_studio() IS NULL, 'a member got a studio to manage');
+DO $$
+BEGIN
+  BEGIN
+    INSERT INTO offerings (studio_id, name, slug) SELECT studio_a, 'Member made', 'member-made' FROM spike_ids;
+    RAISE EXCEPTION 'SPIKE FAIL: a member created a class type';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    PERFORM manage_list_members((SELECT studio_a FROM spike_ids));
+    RAISE EXCEPTION 'SPIKE FAIL: a member listed the members of the studio';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    PERFORM manage_cancel_session((SELECT occurrence_a FROM spike_ids));
+    RAISE EXCEPTION 'SPIKE FAIL: a member cancelled a session';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    PERFORM create_studio_for_owner(auth.uid(), 'Mine', 'mine');
+    RAISE EXCEPTION 'SPIKE FAIL: a signed-in user called create_studio_for_owner';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+END $$;
+UPDATE offerings SET drop_in_price_cents = 1 WHERE studio_id = (SELECT studio_a FROM spike_ids);
+RESET ROLE;
+SELECT spike_assert((SELECT COUNT(*) FROM offerings WHERE drop_in_price_cents = 1) = 0, 'a member changed a price');
+
+-- Single-studio mode: off by default (two studios were created above). Once on,
+-- no further studio can be created and only an allow-listed, confirmed email may own one.
+SELECT spike_assert((SELECT NOT single_studio_mode FROM deployment_settings), 'single-studio mode must be off by default');
+UPDATE deployment_settings SET single_studio_mode = TRUE, owner_email_allowlist = ARRAY['Owner-A@Example.test'];
+DO $$
+BEGIN
+  BEGIN
+    INSERT INTO studios (name, slug) VALUES ('Third studio', 'spike-c');
+    RAISE EXCEPTION 'SPIKE FAIL: a studio was created in single-studio mode while one exists';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO studio_staff (studio_id, profile_id, role) SELECT studio_b, member_b_other_studio, 'owner' FROM spike_ids;
+    RAISE EXCEPTION 'SPIKE FAIL: an account off the allow-list became an owner in single-studio mode';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    PERFORM create_studio_for_owner((SELECT owner_a FROM spike_ids), 'Second', 'second');
+    RAISE EXCEPTION 'SPIKE FAIL: the allow-listed owner created a second studio';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+END $$;
+SELECT spike_assert((studio_setup_access_for((SELECT member_a FROM spike_ids))->>'can_open_setup')::boolean = FALSE, 'a member may open studio setup in single-studio mode');
+SELECT spike_assert((studio_setup_access_for((SELECT owner_a FROM spike_ids))->>'can_open_setup')::boolean, 'the owner lost access to studio setup');
+-- An allow-listed owner (address matched without regard to case) may be linked as owner.
+INSERT INTO studio_staff (studio_id, profile_id, role) SELECT studio_b, owner_a, 'owner' FROM spike_ids;
+UPDATE deployment_settings SET single_studio_mode = FALSE, owner_email_allowlist = '{}';
+
+SELECT 'PASS: RLS isolation, booking, capacity, double-booking, cancellation window, waitlist promotion, entitlement consistency, owner admin RLS and single-studio mode' AS result;
 ROLLBACK;

@@ -249,6 +249,44 @@ See [docs/developer/stripe-setup.md](docs/developer/stripe-setup.md) for detaile
 
 ---
 
+## Single-Studio Mode (one studio, one owner)
+
+By default any signed-in user can open `/manage/onboarding` and create a studio. A deployment that serves one studio should close that. The switch lives in the database, in the one-row table `deployment_settings` (migration `00031`), and is enforced there:
+
+| Column | Meaning |
+|--------|---------|
+| `single_studio_mode` | `true`: at most one studio can ever exist. Default `false`. |
+| `owner_email_allowlist` | Sign-in email addresses allowed to create the studio and hold the owner role. Matched without regard to case; the address must be confirmed. |
+
+Set it once, in the Supabase SQL editor (or `supabase db query`), before the owner registers:
+
+```sql
+update deployment_settings
+set single_studio_mode = true,
+    owner_email_allowlist = array['owner@example.com'];
+```
+
+With the mode on:
+
+- Before the studio exists, only an allow-listed account can open the setup wizard and create it. An empty allow-list means nobody can.
+- Once the studio exists, nobody can create another, and people who sign up are added to it as members.
+- Triggers on `studios` and `studio_staff` refuse a second studio or an owner who is not allow-listed, whichever path the write takes (including the service role). The `onboarding` function answers 403 and the app hides the wizard, but those are conveniences on top.
+
+Also check that email confirmation is on in Supabase Auth: with confirmation off, anyone could register an allow-listed address before its real owner does.
+
+## Owner End-to-End Test
+
+`e2e/owner/` drives the real owner screens in a browser against a local Supabase stack (database, Auth, API, Edge Functions): register, setup wizard, class type, weekly schedule, prices, public page, a webhook-recorded purchase, booking, attendance, payments, and the refusals for every other account.
+
+```bash
+scripts/e2e-stack.sh up        # isolated stack: own project id and ports (563xx)
+npx playwright install chromium
+npm run test:e2e:owner
+scripts/e2e-stack.sh down
+```
+
+It needs Docker and the Supabase CLI. Nothing leaves the machine: the Stripe key is a placeholder and the webhook event is signed locally with a made-up secret.
+
 ## Common Failure Points
 
 | Problem | Likely Cause | Fix |

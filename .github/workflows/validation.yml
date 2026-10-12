@@ -38,3 +38,27 @@ jobs:
       - run: supabase/tests/spike_stage_b.sh
         env:
           SUPABASE_BIN: supabase
+
+  owner-e2e:
+    name: Owner end-to-end (browser, local Supabase)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.12.0
+          cache: npm
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.119.0
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: scripts/e2e-stack.sh up
+      - run: npm run test:e2e:owner
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: owner-e2e-results
+          path: test-results/
+          retention-days: 7
