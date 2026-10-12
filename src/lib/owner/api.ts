@@ -34,6 +34,23 @@ export interface OwnerStudio {
   stripe_account_id: string | null;
   stripe_onboarding_complete: boolean;
   role: string;
+  email: string | null;
+  description: string | null;
+  cancellation_minutes: number;
+  primary_color: string | null;
+  secondary_color: string | null;
+  font: string | null;
+}
+
+export interface StudioSettingsInput {
+  name: string;
+  slug: string;
+  email: string;
+  timezone: string;
+  cancellationMinutes: number;
+  discoverable: boolean;
+  primaryColor: string;
+  secondaryColor: string;
 }
 
 export interface SetupAccess {
@@ -238,6 +255,23 @@ export async function getSetupAccess(): Promise<SetupAccess> {
 
 export async function setStudioDiscoverable(studioId: string, discoverable: boolean): Promise<void> {
   must(await db().from("studios").update({ discoverable }).eq("id", studioId).select("id").single());
+}
+
+/** Validated, owner-only update of the studio's settings (migration 00032). */
+export async function updateStudio(studioId: string, input: StudioSettingsInput): Promise<OwnerStudio> {
+  return must<OwnerStudio>(
+    await db().rpc("manage_update_studio", {
+      p_studio_id: studioId,
+      p_name: input.name,
+      p_slug: input.slug,
+      p_email: input.email,
+      p_timezone: input.timezone,
+      p_cancellation_minutes: input.cancellationMinutes,
+      p_discoverable: input.discoverable,
+      p_primary_color: input.primaryColor,
+      p_secondary_color: input.secondaryColor,
+    }),
+  );
 }
 
 export async function getDashboard(studioId: string): Promise<Dashboard> {

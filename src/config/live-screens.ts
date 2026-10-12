@@ -38,6 +38,7 @@ export const LIVE_ROUTE_PATHS: readonly string[] = [
   "/manage/members/:id", // one member: passes, bookings, payments
   "/manage/offerings", // drop-in prices, class packs, memberships
   "/manage/financials", // payments recorded by the Stripe webhook
+  "/manage/settings", // studio name, booking page, cancellation window, colours
   "/manage/onboarding", // studio setup wizard: onboarding Edge Function
   "/manage/import", // member import: import-members Edge Function
   "/manage/embed", // embed snippet generator: no records shown
