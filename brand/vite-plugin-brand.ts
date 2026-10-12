@@ -60,6 +60,9 @@ export function brandHtml(html: string, brand: Brand, hasSvgIcon: boolean): stri
     head.push(`<style id="brand-splash">#root>div:first-child{background:${brand.colors.background} !important;color:${brand.colors.foreground} !important;}#root>div:first-child p{font-family:${brand.fontDisplay ? `'${brand.fontDisplay}',` : ""}Arial,sans-serif !important;}</style>`);
   }
   out = out.replace("</head>", `  ${head.join("\n    ")}\n  </head>`);
+  // The hosting CSP (script-src 'self') blocks inline scripts, so the inline service-worker
+  // registration only produced a console error on every page. Leave it out.
+  out = out.replace(/\s*<script>(?:(?!<\/script>)[\s\S])*serviceWorker(?:(?!<\/script>)[\s\S])*<\/script>/g, "");
   return applyBrandText(out, brand);
 }
 
