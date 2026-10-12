@@ -5,6 +5,8 @@ import { hasPermission } from "@/types/roles";
 import { resolveStudioSlug } from "@/lib/studio-host";
 import { getRootRedirect } from "@/lib/root-redirect";
 import { RootRedirect } from "@/components/RootRedirect";
+import { LIVE_DATA_ONLY } from "@/config/live-screens";
+import { NotAvailableYet } from "@/components/LiveOnly";
 
 const NoPage = () => null;
 const Demo = import.meta.env.VITE_ROOT_REDIRECT_URL ? NoPage : lazy(() => import("./Demo"));
@@ -50,11 +52,19 @@ export default function Home() {
   // A signed-in user whose profile has not loaded stays inside the app.
   const rootRedirect = getRootRedirect();
   if (!profile && rootRedirect) {
-    return user ? <Navigate to="/schedule" replace /> : <RootRedirect target={rootRedirect} />;
+    return user ? (LIVE_DATA_ONLY ? <NotAvailableYet /> : <Navigate to="/schedule" replace />) : <RootRedirect target={rootRedirect} />;
   }
 
   // Anonymous visitor → the platform landing.
   if (!profile) return <OpenSource />;
+
+  // Live-data-only builds: the dashboards still render sample data, so an owner
+  // goes to studio setup and everyone else sees the empty state.
+  if (LIVE_DATA_ONLY) {
+    return hasPermission(permissions, "studio.manage_schedule")
+      ? <Navigate to="/manage/onboarding" replace />
+      : <NotAvailableYet />;
+  }
 
   // Signed-in user → their workspace. Owners/admins manage; everyone else books.
   return hasPermission(permissions, "studio.manage_schedule")

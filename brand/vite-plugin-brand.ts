@@ -111,7 +111,8 @@ export function brandPlugin(brand: Brand, assetsDir: string | undefined): Plugin
       for (const file of walk(outDir)) {
         if (!TEXT_FILE.test(file)) continue;
         const before = readFileSync(file, "utf8");
-        const after = applyBrandText(before, brand);
+        // No "Powered by" credit on a white-labelled embed widget.
+        const after = applyBrandText(before, brand).replace(/<p class="ft">Powered by [^<]*<\/p>/g, "");
         if (after !== before) writeFileSync(file, after);
       }
     },

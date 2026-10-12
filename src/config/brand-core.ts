@@ -183,6 +183,8 @@ export function applyBrandText(text: string, brand: Brand): string {
   const site = brand.siteUrl.startsWith("http") ? brand.siteUrl : `https://${brand.domain}`;
   return text
     .replace(/https?:\/\/github\.com\/TaylorONeal\/tandava[^\s"'`)<>\\]*/g, site)
+    .replace(/\bTandava is an independent, open-source project\. We are NOT affiliated with,/g, "This tool is not affiliated with,")
+    .replace(/\bTandava is not affiliated with\b/g, "This tool is not affiliated with")
     .replace(/\bTandava Yoga SOMA\b/g, brand.name)
     .replace(/\b(?:Tandava|Oxatl) Yoga Studio\b/g, brand.name)
     .replace(/\b(?:Tandava|Oxatl) Yoga\b/g, brand.name)

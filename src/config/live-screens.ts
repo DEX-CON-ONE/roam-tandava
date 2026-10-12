@@ -1,0 +1,37 @@
+/**
+ * Live-data-only mode.
+ *
+ * Most screens in this app are still interactive mock-ups: they render
+ * hard-coded sample records (classes, members, teachers, audit entries,
+ * revenue) and their actions only change local state. That is right for the
+ * demo, and wrong for a real studio, where an owner or customer would be
+ * looking at records that do not exist.
+ *
+ * Set VITE_LIVE_DATA_ONLY=true to show only the screens that read and write
+ * the real backend. Every other route renders a plain "not available yet"
+ * state instead of sample data, its code is left out of the bundle, and its
+ * navigation entries are hidden. Unset (the default), nothing changes.
+ *
+ * When a screen is wired to the backend, add its route path here.
+ */
+export const LIVE_DATA_ONLY = import.meta.env.VITE_LIVE_DATA_ONLY === "true";
+
+/** Route paths (as written in App.tsx) whose screens use real data only. */
+export const LIVE_ROUTE_PATHS: readonly string[] = [
+  "/", // resolver only: redirects by session
+  "/s/:slug", // public storefront: studio, schedule, plans from the database
+  "/auth/login",
+  "/auth/register",
+  "/auth/reset",
+  "/auth/reset-confirm",
+  "/auth/callback",
+  "/embed/schedule/:slug", // public schedule widget: database
+  "/manage/onboarding", // studio setup wizard: onboarding Edge Function
+  "/manage/import", // member import: import-members Edge Function
+  "/manage/embed", // embed snippet generator: no records shown
+  "*", // not-found page
+];
+
+export function isLiveRoute(path: string): boolean {
+  return LIVE_ROUTE_PATHS.includes(path);
+}
