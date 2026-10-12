@@ -103,7 +103,12 @@ describe("brand build plugin", () => {
     <meta property="og:description" content="Free, open-source studio management." />
     <meta name="twitter:title" content="Tandava | Open Source Studio Management" />
     <meta name="twitter:description" content="Free, open-source studio management." />
-  </head><body><div id="root"><div><p>Tandava</p><p>Loading...</p></div></div></body></html>`;
+  </head><body><div id="root"><div><p>Tandava</p><p>Loading...</p></div></div>
+    <script type="module" src="/src/main.tsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/sw.js'); }
+    </script>
+  </body></html>`;
 
   it("rewrites the static shell so nothing upstream is left", () => {
     const out = brandHtml(html, custom, false);
@@ -114,6 +119,8 @@ describe("brand build plugin", () => {
     expect(out).toContain("family=Josefin+Sans");
     expect(out).toContain("<p>Harbour Strength</p>");
     expect(out).not.toContain("favicon.svg");
+    expect(out).not.toContain("serviceWorker"); // inline scripts are blocked by the hosting CSP
+    expect(out).toContain('<script type="module" src="/src/main.tsx"></script>');
     expect(out).not.toMatch(/tandava|open.source|yoga/i);
   });
 
