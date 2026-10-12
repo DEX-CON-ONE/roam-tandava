@@ -54,14 +54,14 @@ const KINDS: Kind[] = ["drop_in", "class_pack", "membership", "workshop"];
 
 const str = (value: unknown): string => (typeof value === "string" ? value.trim() : "");
 
-async function one(db: NotificationDatabase, table: string, columns: string, id: unknown): Promise<Row | null> {
+export async function lookupOne(db: NotificationDatabase, table: string, columns: string, id: unknown): Promise<Row | null> {
   if (!id) return null;
   const { data, error } = await db.from(table).select(columns).eq("id", id).maybeSingle();
   if (error) console.error(`[stripe-webhook] notification lookup failed: ${table}`);
   return data ?? null;
 }
 
-function formatWhen(startsAt: unknown, timeZone: string): string {
+export function formatWhen(startsAt: unknown, timeZone: string): string {
   const date = new Date(String(startsAt));
   if (Number.isNaN(date.getTime())) return "";
   try {
@@ -81,7 +81,7 @@ function formatAmount(cents: number | null | undefined, currency: string): strin
 }
 
 /** A member can switch off email, or this category of email, per studio or globally. */
-async function customerOptedOut(db: NotificationDatabase, profileId: string, studioId: string, kind: Kind): Promise<boolean> {
+export async function customerOptedOut(db: NotificationDatabase, profileId: string, studioId: string, kind: Kind): Promise<boolean> {
   const { data, error } = await db.from("notification_preferences")
     .select("studio_id, email_enabled, booking_confirmations, payment_alerts")
     .eq("profile_id", profileId);
@@ -96,15 +96,15 @@ async function customerOptedOut(db: NotificationDatabase, profileId: string, stu
 
 async function describePurchase(db: NotificationDatabase, kind: Kind, metadata: Record<string, string>) {
   if (kind === "class_pack") {
-    const pack = await one(db, "class_pack_types", "name, class_count", metadata.class_pack_type_id);
+    const pack = await lookupOne(db, "class_pack_types", "name, class_count", metadata.class_pack_type_id);
     const count = typeof pack?.class_count === "number" ? ` (${pack.class_count} classes)` : "";
     return { itemName: `${str(pack?.name) || "Class pack"}${count}`, relatedType: "class_pack_type", relatedId: metadata.class_pack_type_id };
   }
   if (kind === "membership") {
-    const membership = await one(db, "membership_types", "name", metadata.membership_type_id);
+    const membership = await lookupOne(db, "membership_types", "name", metadata.membership_type_id);
     return { itemName: str(membership?.name) || "Membership", relatedType: "membership_type", relatedId: metadata.membership_type_id };
   }
-  const event = await one(db, "events", "title", metadata.event_id);
+  const event = await lookupOne(db, "events", "title", metadata.event_id);
   return { itemName: str(event?.title) || "Workshop", relatedType: "event", relatedId: metadata.event_id };
 }
 
@@ -131,8 +131,8 @@ export async function sendCheckoutNotifications({
     }
 
     const [studio, profile] = await Promise.all([
-      one(database, "studios", "name, email, timezone, currency", metadata.studio_id),
-      one(database, "profiles", "first_name, last_name, display_name, email", metadata.profile_id),
+      lookupOne(database, "studios", "name, email, timezone, currency", metadata.studio_id),
+      lookupOne(database, "profiles", "first_name, last_name, display_name, email", metadata.profile_id),
     ]);
     if (!studio || !str(studio.name)) {
       outcome.skipped.push("studio not found");
@@ -154,11 +154,11 @@ export async function sendCheckoutNotifications({
     let when = "";
 
     if (kind === "drop_in") {
-      const occurrence = await one(database, "class_occurrences", "starts_at, ends_at, offering_id, location_id, teacher_id", metadata.occurrence_id);
+      const occurrence = await lookupOne(database, "class_occurrences", "starts_at, ends_at, offering_id, location_id, teacher_id", metadata.occurrence_id);
       const [offering, location, teacher] = await Promise.all([
-        one(database, "offerings", "name, duration_minutes", occurrence?.offering_id),
-        one(database, "locations", "name, address_line1, city", occurrence?.location_id),
-        one(database, "profiles", "first_name, last_name, display_name", occurrence?.teacher_id),
+        lookupOne(database, "offerings", "name, duration_minutes", occurrence?.offering_id),
+        lookupOne(database, "locations", "name, address_line1, city", occurrence?.location_id),
+        lookupOne(database, "profiles", "first_name, last_name, display_name", occurrence?.teacher_id),
       ]);
       itemName = str(offering?.name) || "Class";
       when = occurrence ? formatWhen(occurrence.starts_at, str(studio.timezone) || "UTC") : "";

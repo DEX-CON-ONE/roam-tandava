@@ -62,6 +62,16 @@ function configuredKeys(credentials: ServiceCredentials): string[] {
   return keys;
 }
 
+/**
+ * True when the bearer token is exactly `secret`. For functions called by a
+ * machine that holds a dedicated shared secret instead of a Supabase key.
+ * Fails closed when the secret is not configured.
+ */
+export function hasBearerSecret(req: Request, secret: string | undefined): boolean {
+  const token = bearerToken(req);
+  return Boolean(secret && token && timingSafeEqual(token, secret));
+}
+
 /** Role claim of a JWT, without verifying it (the gateway verifies the signature). */
 export function jwtRole(token: string): string | null {
   const parts = token.split(".");

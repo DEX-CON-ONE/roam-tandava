@@ -424,3 +424,7 @@ verify_jwt = true
 
 [functions.push]
 verify_jwt = true
+
+# Called by the database (pg_net trigger) with a dedicated shared secret, not a JWT.
+[functions.booking-notifications]
+verify_jwt = false

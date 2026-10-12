@@ -63,7 +63,8 @@ Sending is server-side only. The `email`, `sms` and `push` HTTP functions accept
 |-------------|-------------------|-----------------------------------|-----------|
 | Pays for a drop-in class through Stripe Checkout | `bookingConfirmationEmail` | `studioSaleNotificationEmail` (new booking) | `stripe-webhook`, on `checkout.session.completed` |
 | Buys a class pack, membership or workshop place through Stripe Checkout | `purchaseConfirmationEmail` | `studioSaleNotificationEmail` (new sale) | `stripe-webhook`, on `checkout.session.completed` |
-| Books with an existing pack or membership (`book_class` RPC) | none yet | none yet | no server-side hook exists |
+| Books with an existing pack or membership (`book_class` RPC) | `bookingConfirmationEmail` | `studioSaleNotificationEmail` (new booking) | `booking-notifications`, called by the `bookings_notify_confirmed` trigger through pg_net |
+| Joins a waitlist | none yet | none yet | excluded by the trigger (status is not `confirmed`) |
 | Cancels, is promoted from the waitlist, class reminder, welcome, membership renewal or failed payment | none yet | none yet | templates exist for some; nothing triggers them |
 
 How the webhook path works (`supabase/functions/stripe-webhook/notifications.ts`):
@@ -73,6 +74,12 @@ How the webhook path works (`supabase/functions/stripe-webhook/notifications.ts`
 - **Studio data, not constants.** Studio name, contact address (used as the customer's reply-to and as the studio recipient), timezone and currency come from the `studios` row. A studio with no `email` gets no notification.
 - **Preferences.** A member's `notification_preferences` row (`email_enabled`, `booking_confirmations`, `payment_alerts`; studio-specific wins over global) can switch the customer email off.
 - **Audit.** Each attempt is recorded in `notification_deliveries` (`channel = 'email'`, status `sent` or `failed`). The `email_log` table shown above was never created; `notification_deliveries` is the log.
+
+How the booking path works (`supabase/functions/booking-notifications/`, migration `00023`):
+
+- **Trigger, not browser.** `AFTER INSERT ON bookings` for a `confirmed` booking with no `transaction_id` queues a pg_net request. pg_net sends it after the transaction commits, so it cannot slow, block or roll back a booking. Checkout drop-ins carry a `transaction_id` and are left to the payment path, so they are not confirmed twice.
+- **Per-project setup.** The trigger does nothing until two Vault secrets exist: `booking_notifications_url` and `booking_notifications_secret`. The same secret is set on the function as `BOOKING_NOTIFICATIONS_SECRET`. It is a dedicated value, not the service role key; the function is deployed with `--no-verify-jwt` and accepts only that bearer token.
+- **Once per booking.** The function inserts the `notification_deliveries` row before sending; the unique index `idx_notification_deliveries_booking_email_once` refuses a second claim for the same booking and kind of email. A failed send is recorded and not retried.
 
 ## Design Principles
 
