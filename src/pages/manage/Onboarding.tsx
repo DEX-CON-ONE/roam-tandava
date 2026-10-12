@@ -20,7 +20,7 @@ import {
   SkipForward, ExternalLink, CheckCircle2, Circle, Plus, Trash2, Loader2,
 } from "lucide-react";
 import { brand } from "@/config/brand";
-import { LIVE_DATA_ONLY } from "@/config/live-screens";
+import { LIVE_DATA_ONLY, isLiveRoute } from "@/config/live-screens";
 
 const STEPS = [
   { key: "studio", label: "Studio Info", icon: Building2 },
@@ -373,7 +373,7 @@ export default function Onboarding() {
     setLaunching(false);
     try { localStorage.removeItem(DRAFT_KEY); } catch { /* best-effort */ }
     toast({ title: "Studio launched!", description: `Your studio is now live. Welcome to ${brand.name}!` });
-    if (isBackendConfigured()) navigate(LIVE_DATA_ONLY ? "/manage/import" : "/manage");
+    if (isBackendConfigured()) navigate(LIVE_DATA_ONLY && !isLiveRoute("/manage") ? "/manage/import" : "/manage");
   };
 
   const updateStaff = (i: number, key: keyof StaffRow, value: string) =>
@@ -400,7 +400,7 @@ export default function Onboarding() {
             <Textarea id="studioDesc" placeholder="A brief description of your studio..." value={f.studioDesc ?? ""} onChange={set("studioDesc")} rows={3} />
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <Sel label="Timezone" value={f.timezone ?? ""} onChange={sel("timezone")} options={[["America/New_York","Eastern (ET)"],["America/Chicago","Central (CT)"],["America/Denver","Mountain (MT)"],["America/Los_Angeles","Pacific (PT)"]]} />
+            <Sel label="Timezone" value={f.timezone ?? ""} onChange={sel("timezone")} options={[["Europe/London","UK (London)"],["Europe/Dublin","Ireland (Dublin)"],["Europe/Paris","Central Europe (Paris)"],["America/New_York","Eastern (ET)"],["America/Chicago","Central (CT)"],["America/Denver","Mountain (MT)"],["America/Los_Angeles","Pacific (PT)"],["Australia/Sydney","Australia (Sydney)"]]} />
             <Sel label="Currency" value={f.currency ?? ""} onChange={sel("currency")} options={[["USD","USD ($)"],["EUR","EUR"],["GBP","GBP"],["CAD","CAD"]]} />
           </div>
         </StepCard>

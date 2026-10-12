@@ -5,7 +5,8 @@ import { hasPermission } from "@/types/roles";
 import { resolveStudioSlug } from "@/lib/studio-host";
 import { getRootRedirect } from "@/lib/root-redirect";
 import { RootRedirect } from "@/components/RootRedirect";
-import { LIVE_DATA_ONLY } from "@/config/live-screens";
+import { LIVE_DATA_ONLY, isLiveRoute } from "@/config/live-screens";
+import { StudioSetupRedirect } from "@/components/auth/StudioSetupRoute";
 import { NotAvailableYet } from "@/components/LiveOnly";
 import { defaultMemberHome, peekNext, takeNext } from "@/lib/member/next";
 
@@ -64,13 +65,14 @@ export default function Home() {
   // Anonymous visitor → the platform landing.
   if (!profile) return <OpenSource />;
 
-  // Live-data-only builds: the dashboards still render sample data, so an owner
-  // goes to studio setup and everyone else sees the empty state.
+  // Live-data-only builds: an owner goes to the dashboard (or studio setup
+  // while the dashboard is not live). An account that may still create the
+  // studio goes to setup; everyone else sees the empty state.
   if (LIVE_DATA_ONLY) {
     if (memberDestination) return <Navigate to={memberDestination} replace />;
     return hasPermission(permissions, "studio.manage_schedule")
-      ? <Navigate to="/manage/onboarding" replace />
-      : <NotAvailableYet />;
+      ? <Navigate to={isLiveRoute("/manage") ? "/manage" : "/manage/onboarding"} replace />
+      : <StudioSetupRedirect fallback={<NotAvailableYet />} />;
   }
 
   // Signed-in user → their workspace. Owners/admins manage; everyone else books.

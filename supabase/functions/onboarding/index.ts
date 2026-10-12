@@ -325,6 +325,16 @@ serve(async (req) => {
 
   const db = createClient(supabaseUrl, serviceKey);
 
+  // Who may use studio setup is decided in the database (migration 00031):
+  // an existing owner, or an account allowed to create a studio. In
+  // single-studio mode that is only an allow-listed owner email, and only
+  // until the studio exists.
+  const { data: access, error: accessErr } = await db.rpc("studio_setup_access_for", { p_profile_id: user.id });
+  if (accessErr) return json({ error: "Studio setup is unavailable" }, 500);
+  if (!access?.can_open_setup) {
+    return json({ error: "Studio setup is not available for this account" }, 403);
+  }
+
   // Resolve the caller's studio (as owner), creating it on the 'studio' step.
   const { data: ownerRow } = await db
     .from("studio_staff")
@@ -355,23 +365,23 @@ serve(async (req) => {
         return json({ error: "Complete the Studio Info step first" }, 409);
       }
       const name = String(f.studioName ?? "My Studio");
-      const { data: studio, error } = await db
-        .from("studios")
-        .insert({
-          name,
-          slug: `${slugify(name)}-${Math.random().toString(36).slice(2, 6)}`,
-          description: f.studioDesc ?? null,
-          timezone: f.timezone ?? "America/New_York",
-          currency: f.currency ?? "USD",
-          brand_primary_color: f.primaryColor ?? undefined,
-          brand_secondary_color: f.secondaryColor ?? undefined,
-        })
-        .select("id")
-        .single();
-      if (error) return json({ error: error.message }, 500);
-      studioId = studio.id as string;
-
-      await db.from("studio_staff").insert({ studio_id: studioId, profile_id: user.id, role: "owner" });
+      // One transaction: permission check, studio, owner link. The slug is
+      // the studio name; a suffix is added only if that slug is taken.
+      const { data: newStudioId, error } = await db.rpc("create_studio_for_owner", {
+        p_owner_id: user.id,
+        p_name: name,
+        p_slug: slugify(name),
+        p_description: f.studioDesc ?? null,
+        p_timezone: f.timezone ?? "America/New_York",
+        p_currency: f.currency ?? "USD",
+        p_primary_color: f.primaryColor ?? null,
+        p_secondary_color: f.secondaryColor ?? null,
+      });
+      if (error || !newStudioId) {
+        const denied = error?.code === "42501";
+        return json({ error: denied ? "Studio setup is not available for this account" : error?.message ?? "Could not create the studio" }, denied ? 403 : 500);
+      }
+      studioId = newStudioId as string;
       await recordProgress(db, studioId, "studio_info", true);
       return json({ ok: true, studioId });
     }

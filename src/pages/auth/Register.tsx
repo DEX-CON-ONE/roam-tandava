@@ -13,6 +13,7 @@ import { useTranslation } from "react-i18next";
 import { brand } from "@/config/brand";
 import { BrandMark } from "@/components/BrandMark";
 import { authProviders } from "@/config/auth-providers";
+import { StudioSetupOnly } from "@/components/auth/StudioSetupRoute";
 import { defaultMemberHome, peekNext, rememberNextFromUrl, takeNext } from "@/lib/member/next";
 
 type RegistrationStep = "info" | "complete";
@@ -171,14 +172,16 @@ const Register = () => {
                   {t('register.completeProfile')}
                 </Button>
     
-                <Button
-                  variant="outline"
-                  onClick={() => navigate("/manage/onboarding")}
-                  className="w-full h-12"
-                >
-                  <Store className="me-2 h-4 w-4" />
-                  {t('register.setupStudio')}
-                </Button>
+                <StudioSetupOnly>
+                  <Button
+                    variant="outline"
+                    onClick={() => navigate("/manage/onboarding")}
+                    className="w-full h-12"
+                  >
+                    <Store className="me-2 h-4 w-4" />
+                    {t('register.setupStudio')}
+                  </Button>
+                </StudioSetupOnly>
 
               </>
 

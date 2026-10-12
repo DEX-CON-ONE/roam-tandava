@@ -162,7 +162,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       };
     }
 
-    const { error } = await auth.signInWithEmail(email, password);
+    const { user: signedInUser, error } = await auth.signInWithEmail(email, password);
+
+    // Load the profile before returning. The auth listener does the same a
+    // moment later, but callers navigate to "/" as soon as this resolves, and
+    // the root route treats "no user yet" as an anonymous visitor (on a
+    // single-studio build that means a redirect to the public website).
+    if (!error && signedInUser) {
+      const profile = await fetchProfile(signedInUser.id);
+      setState({
+        user: signedInUser,
+        profile,
+        permissions: profile ? getPermissionsForUserRole(profile.role) : [],
+        isLoading: false,
+        isDemoMode: false,
+      });
+    }
 
     if (error) {
       const attemptResult = recordFailedLoginAttempt(email);

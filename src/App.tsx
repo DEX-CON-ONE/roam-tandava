@@ -10,6 +10,7 @@ import { ThemeProvider } from "@/contexts/ThemeContext";
 import { LocaleProvider } from "@/contexts/LocaleContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { AuthCallback } from "@/components/auth/AuthCallback";
+import { StudioSetupRoute } from "@/components/auth/StudioSetupRoute";
 import { MarketingRoute } from "@/components/RootRedirect";
 import { LiveOnly } from "@/components/LiveOnly";
 // DemoPanel removed — role selection now happens on landing page + DemoRoleBar
@@ -61,6 +62,8 @@ class AppErrorBoundary extends Component<
 // (VITE_ROOT_REDIRECT_URL); their routes redirect instead (see MarketingRoute).
 // Screens that still render sample data are left out in live-data-only mode
 // (VITE_LIVE_DATA_ONLY); their routes show an empty state (see LiveOnly).
+// The owner screens (pages/owner) read and write the real backend; in
+// live-data-only mode they take the place of the sample-data mock-ups.
 const NoPage = () => null;
 const Home = lazy(() => import("./pages/Home"));
 const StudioStorefront = lazy(() => import("./pages/StudioStorefront"));
@@ -92,17 +95,17 @@ const Blog = import.meta.env.VITE_ROOT_REDIRECT_URL ? NoPage : lazy(() => import
 const BlogCategory = import.meta.env.VITE_ROOT_REDIRECT_URL ? NoPage : lazy(() => import("./pages/blog/BlogCategory"));
 const BlogPost = import.meta.env.VITE_ROOT_REDIRECT_URL ? NoPage : lazy(() => import("./pages/blog/BlogPost"));
 
-const ManageDashboard = import.meta.env.VITE_LIVE_DATA_ONLY === "true" ? NoPage : lazy(() => import("./pages/manage/Dashboard"));
-const ScheduleManage = import.meta.env.VITE_LIVE_DATA_ONLY === "true" ? NoPage : lazy(() => import("./pages/manage/ScheduleManage"));
-const StudentsManage = import.meta.env.VITE_LIVE_DATA_ONLY === "true" ? NoPage : lazy(() => import("./pages/manage/Students"));
+const ManageDashboard = import.meta.env.VITE_LIVE_DATA_ONLY === "true" ? lazy(() => import("./pages/owner/OwnerDashboard")) : lazy(() => import("./pages/manage/Dashboard"));
+const ScheduleManage = import.meta.env.VITE_LIVE_DATA_ONLY === "true" ? lazy(() => import("./pages/owner/OwnerClasses")) : lazy(() => import("./pages/manage/ScheduleManage"));
+const StudentsManage = import.meta.env.VITE_LIVE_DATA_ONLY === "true" ? lazy(() => import("./pages/owner/OwnerMembers")) : lazy(() => import("./pages/manage/Students"));
 const TeachersManage = import.meta.env.VITE_LIVE_DATA_ONLY === "true" ? NoPage : lazy(() => import("./pages/manage/Teachers"));
-const OfferingsManage = import.meta.env.VITE_LIVE_DATA_ONLY === "true" ? NoPage : lazy(() => import("./pages/manage/Offerings"));
-const FinancialsManage = import.meta.env.VITE_LIVE_DATA_ONLY === "true" ? NoPage : lazy(() => import("./pages/manage/Financials"));
+const OfferingsManage = import.meta.env.VITE_LIVE_DATA_ONLY === "true" ? lazy(() => import("./pages/owner/OwnerPrices")) : lazy(() => import("./pages/manage/Offerings"));
+const FinancialsManage = import.meta.env.VITE_LIVE_DATA_ONLY === "true" ? lazy(() => import("./pages/owner/OwnerPayments")) : lazy(() => import("./pages/manage/Financials"));
 const ReportsManage = import.meta.env.VITE_LIVE_DATA_ONLY === "true" ? NoPage : lazy(() => import("./pages/manage/Reports"));
 const ImportManage = lazy(() => import("./pages/manage/Import"));
 const SettingsManage = import.meta.env.VITE_LIVE_DATA_ONLY === "true" ? NoPage : lazy(() => import("./pages/manage/Settings"));
 const OnboardingManage = lazy(() => import("./pages/manage/Onboarding"));
-const MemberDetailManage = import.meta.env.VITE_LIVE_DATA_ONLY === "true" ? NoPage : lazy(() => import("./pages/manage/MemberDetail"));
+const MemberDetailManage = import.meta.env.VITE_LIVE_DATA_ONLY === "true" ? lazy(() => import("./pages/owner/OwnerMemberDetail")) : lazy(() => import("./pages/manage/MemberDetail"));
 const PromoCodesManage = import.meta.env.VITE_LIVE_DATA_ONLY === "true" ? NoPage : lazy(() => import("./pages/manage/PromoCodes"));
 const EventsManage = import.meta.env.VITE_LIVE_DATA_ONLY === "true" ? NoPage : lazy(() => import("./pages/manage/Events"));
 const LandingPagesManage = import.meta.env.VITE_LIVE_DATA_ONLY === "true" ? NoPage : lazy(() => import("./pages/manage/LandingPages"));
@@ -126,6 +129,8 @@ const AuditLogsManage = import.meta.env.VITE_LIVE_DATA_ONLY === "true" ? NoPage 
 const DataDictionaryManage = import.meta.env.VITE_LIVE_DATA_ONLY === "true" ? NoPage : lazy(() => import("./pages/manage/DataDictionary"));
 const DefinitionsManage = import.meta.env.VITE_LIVE_DATA_ONLY === "true" ? NoPage : lazy(() => import("./pages/manage/Definitions"));
 const EmbedSettingsManage = lazy(() => import("./pages/manage/EmbedSettings"));
+// Session roster: real data only, so it exists only in live-data-only builds.
+const SessionManage = import.meta.env.VITE_LIVE_DATA_ONLY === "true" ? lazy(() => import("./pages/owner/OwnerSession")) : lazy(() => import("./pages/NotFound"));
 
 const NotificationPreferences = import.meta.env.VITE_LIVE_DATA_ONLY === "true" ? NoPage : lazy(() => import("./pages/account/NotificationPreferences"));
 
@@ -231,20 +236,22 @@ const App = () => (
                        Guards: "studio.manage_schedule" = owner + admin (day-to-day mgmt);
                                "studio.manage_settings"  = owner only (settings, money, growth).
                        Demo mode bypasses all guards (see ProtectedRoute). */}
-                  <Route path="/manage" element={<LiveOnly><ProtectedRoute permission="studio.manage_schedule"><ManageDashboard /></ProtectedRoute></LiveOnly>} />
-                  <Route path="/manage/schedule" element={<LiveOnly><ProtectedRoute permission="studio.manage_schedule"><ScheduleManage /></ProtectedRoute></LiveOnly>} />
-                  <Route path="/manage/students" element={<LiveOnly><ProtectedRoute permission="studio.manage_schedule"><StudentsManage /></ProtectedRoute></LiveOnly>} />
+                  <Route path="/manage" element={<ProtectedRoute permission="studio.manage_schedule"><ManageDashboard /></ProtectedRoute>} />
+                  <Route path="/manage/schedule" element={<ProtectedRoute permission="studio.manage_schedule"><ScheduleManage /></ProtectedRoute>} />
+                  <Route path="/manage/sessions/:id" element={<ProtectedRoute permission="studio.manage_schedule"><SessionManage /></ProtectedRoute>} />
+                  <Route path="/manage/students" element={<ProtectedRoute permission="studio.manage_schedule"><StudentsManage /></ProtectedRoute>} />
                   <Route path="/manage/teachers" element={<LiveOnly><ProtectedRoute permission="studio.manage_schedule"><TeachersManage /></ProtectedRoute></LiveOnly>} />
-                  <Route path="/manage/offerings" element={<LiveOnly><ProtectedRoute permission="studio.manage_schedule"><OfferingsManage /></ProtectedRoute></LiveOnly>} />
-                  <Route path="/manage/financials" element={<LiveOnly><ProtectedRoute permission="studio.manage_settings"><FinancialsManage /></ProtectedRoute></LiveOnly>} />
+                  <Route path="/manage/offerings" element={<ProtectedRoute permission="studio.manage_schedule"><OfferingsManage /></ProtectedRoute>} />
+                  <Route path="/manage/financials" element={<ProtectedRoute permission="studio.manage_settings"><FinancialsManage /></ProtectedRoute>} />
                   <Route path="/manage/reports" element={<LiveOnly><ProtectedRoute permission="studio.manage_schedule"><ReportsManage /></ProtectedRoute></LiveOnly>} />
                   <Route path="/manage/import" element={<ProtectedRoute permission="studio.manage_settings"><ImportManage /></ProtectedRoute>} />
                   <Route path="/manage/settings" element={<LiveOnly><ProtectedRoute permission="studio.manage_settings"><SettingsManage /></ProtectedRoute></LiveOnly>} />
-                  {/* No permission gate: this is where a new owner *creates* their
-                       studio, before they hold any studio role. Authenticated-only;
-                       the onboarding edge function authorizes each write. */}
-                  <Route path="/manage/onboarding" element={<ProtectedRoute><OnboardingManage /></ProtectedRoute>} />
-                  <Route path="/manage/members/:id" element={<LiveOnly><ProtectedRoute permission="studio.manage_schedule"><MemberDetailManage /></ProtectedRoute></LiveOnly>} />
+                  {/* No role gate: this is where a new owner *creates* their studio,
+                       before they hold any studio role. StudioSetupRoute asks the
+                       database who may use it (single-studio mode + owner allow-list);
+                       the onboarding edge function and database triggers enforce it. */}
+                  <Route path="/manage/onboarding" element={<ProtectedRoute><StudioSetupRoute><OnboardingManage /></StudioSetupRoute></ProtectedRoute>} />
+                  <Route path="/manage/members/:id" element={<ProtectedRoute permission="studio.manage_schedule"><MemberDetailManage /></ProtectedRoute>} />
                   <Route path="/manage/promo-codes" element={<LiveOnly><ProtectedRoute permission="studio.manage_settings"><PromoCodesManage /></ProtectedRoute></LiveOnly>} />
                   <Route path="/manage/events" element={<LiveOnly><ProtectedRoute permission="studio.manage_schedule"><EventsManage /></ProtectedRoute></LiveOnly>} />
                   <Route path="/manage/landing-pages" element={<LiveOnly><ProtectedRoute permission="studio.manage_settings"><LandingPagesManage /></ProtectedRoute></LiveOnly>} />

@@ -68,10 +68,29 @@ const manageNavigation = [
   { nameKey: "smsInbox", href: "/manage/sms-inbox", icon: MessageSquare },
   { nameKey: "notifications", href: "/manage/notification-settings", icon: Bell },
   { nameKey: "settings", href: "/manage/settings", icon: Settings },
+  { nameKey: "studioSetup", href: "/manage/onboarding", icon: Settings, liveOnly: true },
 ];
 
+// Activity-neutral labels for the sections that use real data (live-data-only builds).
+const liveNavLabels: Record<string, string> = {
+  schedule: "Classes",
+  students: "Members",
+  offerings: "Prices",
+  financials: "Payments",
+  importData: "Import members",
+  studioSetup: "Studio setup",
+};
+
+// Detail pages that belong to a section without sharing its path.
+const navAliases: Record<string, string> = {
+  "/manage/schedule": "/manage/sessions",
+  "/manage/students": "/manage/members",
+};
+
 // Live-data-only builds list only the sections that use real data.
-const visibleManageNavigation = LIVE_DATA_ONLY ? manageNavigation.filter((item) => isLiveRoute(item.href)) : manageNavigation;
+const visibleManageNavigation = LIVE_DATA_ONLY
+  ? manageNavigation.filter((item) => isLiveRoute(item.href))
+  : manageNavigation.filter((item) => !("liveOnly" in item && item.liveOnly));
 
 export function ManageLayout({ children }: ManageLayoutProps) {
   const location = useLocation();
@@ -81,6 +100,7 @@ export function ManageLayout({ children }: ManageLayoutProps) {
 
   const isActive = (href: string) => {
     if (href === "/manage") return location.pathname === "/manage";
+    if (navAliases[href] && location.pathname.startsWith(navAliases[href])) return true;
     return location.pathname.startsWith(href);
   };
 
@@ -199,7 +219,9 @@ export function ManageLayout({ children }: ManageLayoutProps) {
                 )}
               >
                 <item.icon className="h-4 w-4 shrink-0" />
-                {t(`nav.${item.nameKey}`)}
+                {LIVE_DATA_ONLY && liveNavLabels[item.nameKey]
+                  ? t(`liveNav.${item.nameKey}`, liveNavLabels[item.nameKey])
+                  : t(`nav.${item.nameKey}`)}
               </Link>
             ))}
           </nav>

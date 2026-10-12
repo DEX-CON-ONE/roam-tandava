@@ -1,4 +1,12 @@
 {
+  "liveNav": {
+    "schedule": "Classes",
+    "students": "Members",
+    "offerings": "Prices",
+    "financials": "Payments",
+    "importData": "Import members",
+    "studioSetup": "Studio setup"
+  },
   "nav": {
     "dashboard": "Dashboard",
     "schedule": "Schedule",
