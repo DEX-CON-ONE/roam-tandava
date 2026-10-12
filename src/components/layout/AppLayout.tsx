@@ -33,6 +33,8 @@ import {
 
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { useTranslation } from "react-i18next";
+import { brand } from "@/config/brand";
+import { BrandMark } from "@/components/BrandMark";
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -93,12 +95,16 @@ export function AppLayout({ children }: AppLayoutProps) {
             to="/home"
             className="me-4 flex items-center gap-2.5 rounded-xl px-1 py-1 transition-colors hover:bg-secondary/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
           >
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-accent-teal to-accent-sage shadow-md">
-              <span className="text-lg font-bold text-white">O</span>
-            </div>
-            <span className="text-xl font-display font-bold tracking-tight">
-              Oxatl Yoga
-            </span>
+            {brand.isCustom ? (
+              <BrandMark size="md" withName nameClassName="text-xl font-display font-bold" />
+            ) : (
+              <>
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-accent-teal to-accent-sage shadow-md">
+                  <span className="text-lg font-bold text-white">O</span>
+                </div>
+                <span className="text-xl font-display font-bold tracking-tight">Oxatl Yoga</span>
+              </>
+            )}
           </Link>
 
           {/* Desktop Navigation */}
@@ -293,9 +299,10 @@ export function AppLayout({ children }: AppLayoutProps) {
       <footer className="border-t border-border bg-card/50 py-6 mt-auto">
         <div className="container flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-muted-foreground">
           <span>
-            &copy; {new Date().getFullYear()} Oxatl Yoga.{" "}
+            &copy; {new Date().getFullYear()} {brand.isCustom ? brand.name : "Oxatl Yoga"}.{" "}
             {t("footer.allRightsReserved")}
           </span>
+          {!brand.isCustom && (
           <span>
             {t("footer.poweredBy")}{" "}
             <Link
@@ -306,6 +313,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             </Link>{" "}
             &mdash; {t("footer.openSourceStudio")}
           </span>
+          )}
         </div>
       </footer>
     </div>

@@ -3,6 +3,7 @@ import { EmbedLayout, openHosted } from "./EmbedLayout";
 import { usePublicSchedule } from "@/hooks/useBooking";
 import { isBackendConfigured } from "@/lib/backend";
 import { Clock, MapPin } from "lucide-react";
+import { brand } from "@/config/brand";
 
 interface Row {
   id: string;
@@ -97,7 +98,7 @@ export default function EmbedSchedule() {
           );
         })}
 
-        <p className="pt-1 text-center text-[10px] text-muted-foreground">Powered by Tandava</p>
+        {!brand.isCustom && <p className="pt-1 text-center text-[10px] text-muted-foreground">Powered by Tandava</p>}
       </div>
     </EmbedLayout>
   );

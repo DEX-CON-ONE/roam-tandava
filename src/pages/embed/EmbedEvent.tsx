@@ -1,6 +1,7 @@
 import { useParams } from "react-router-dom";
 import { EmbedLayout, openHosted } from "./EmbedLayout";
 import { CalendarDays } from "lucide-react";
+import { brand } from "@/config/brand";
 
 /**
  * Compact single-event embed. Registration (and payment) happens on the hosted
@@ -26,7 +27,7 @@ export default function EmbedEvent() {
         >
           View details & register
         </button>
-        <p className="text-[10px] text-muted-foreground">Powered by Tandava</p>
+        {!brand.isCustom && <p className="text-[10px] text-muted-foreground">Powered by Tandava</p>}
       </div>
     </EmbedLayout>
   );

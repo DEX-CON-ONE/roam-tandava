@@ -1,4 +1,5 @@
 import { Helmet } from "react-helmet-async";
+import { brand } from "@/config/brand";
 
 interface SEOHeadProps {
   /** Page title — will be appended with " | Tandava" */
@@ -18,12 +19,13 @@ interface SEOHeadProps {
 }
 
 const DEFAULTS = {
-  siteName: import.meta.env.VITE_APP_NAME || "Tandava",
+  siteName: import.meta.env.VITE_APP_NAME || brand.name,
   siteUrl: import.meta.env.VITE_APP_URL || "https://tandavastudio.com",
-  defaultDescription:
-    "Book yoga classes, workshops, and appointments. Track your practice, connect with teachers, and join our wellness community.",
-  defaultImage: "/og-image.png",
-  twitterHandle: "@TandavaYoga",
+  defaultDescription: brand.isCustom
+    ? brand.description
+    : "Book yoga classes, workshops, and appointments. Track your practice, connect with teachers, and join our wellness community.",
+  defaultImage: brand.isCustom ? "/icon-512.png" : "/og-image.png",
+  twitterHandle: brand.twitterHandle ?? "",
 };
 
 export function SEOHead({
@@ -37,7 +39,9 @@ export function SEOHead({
 }: SEOHeadProps) {
   const fullTitle = title
     ? `${title} | ${DEFAULTS.siteName}`
-    : `${DEFAULTS.siteName} | Book Classes & Track Your Practice`;
+    : brand.isCustom
+      ? [DEFAULTS.siteName, brand.tagline].filter(Boolean).join(" | ")
+      : `${DEFAULTS.siteName} | Book Classes & Track Your Practice`;
 
   const fullCanonical = canonical
     ? `${DEFAULTS.siteUrl}${canonical}`

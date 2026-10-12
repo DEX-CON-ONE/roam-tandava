@@ -39,6 +39,8 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTranslation } from "react-i18next";
+import { brand } from "@/config/brand";
+import { BrandMark } from "@/components/BrandMark";
 
 interface ManageLayoutProps {
   children: ReactNode;
@@ -103,11 +105,9 @@ export function ManageLayout({ children }: ManageLayoutProps) {
             </Link>
             <div className="h-5 w-px bg-border mx-1" />
             <Link to="/manage" className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-                <span className="text-sm font-bold text-primary-foreground">T</span>
-              </div>
+              <BrandMark size="sm" />
               <div className="hidden sm:block">
-                <p className="text-sm font-semibold leading-none">Tandava Yoga</p>
+                <p className="text-sm font-semibold leading-none">{brand.isCustom ? brand.name : "Tandava Yoga"}</p>
                 <p className="text-xs text-muted-foreground">{t('studioManagement')}</p>
               </div>
             </Link>

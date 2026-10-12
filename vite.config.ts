@@ -1,12 +1,17 @@
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { sentryVitePlugin } from "@sentry/vite-plugin";
+import { buildBrand } from "./src/config/brand-core";
+import { brandPlugin } from "./brand/vite-plugin-brand";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   // Opt in only on the public marketing deployment. Normal installs omit all game assets.
   const blogGames = process.env.VITE_BLOG_GAMES === "true";
+  // White-label settings (VITE_BRAND_*): from .env files or the build environment.
+  const env = { ...loadEnv(mode, process.cwd(), "VITE_"), ...process.env } as Record<string, string | undefined>;
+  const brand = buildBrand(env);
   return {
     // Keep the browser gate identical to the Node prerenderer, including when
     // a developer has an old VITE_BLOG_GAMES value in a local .env file.
@@ -18,7 +23,8 @@ export default defineConfig(({ mode }) => {
       port: 8080,
     },
     build: {
-      sourcemap: true,
+      // A white-labelled build does not publish the upstream sources.
+      sourcemap: !brand.isCustom,
       rollupOptions: {
         input: blogGames
           ? {
@@ -57,6 +63,7 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [
       react(),
+      brandPlugin(brand, env.VITE_BRAND_ASSETS_DIR),
       blogGames && {
         name: "blog-game-entry",
         configureServer(server) {
