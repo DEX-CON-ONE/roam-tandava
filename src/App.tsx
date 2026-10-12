@@ -64,6 +64,12 @@ class AppErrorBoundary extends Component<
 const NoPage = () => null;
 const Home = lazy(() => import("./pages/Home"));
 const StudioStorefront = lazy(() => import("./pages/StudioStorefront"));
+// Member booking journey (live data): schedule, class, passes, my bookings, checkout return.
+const MemberSchedule = lazy(() => import("./pages/member/StudioSchedule"));
+const MemberClassDetail = lazy(() => import("./pages/member/ClassDetail"));
+const MemberPlans = lazy(() => import("./pages/member/StudioPlans"));
+const MemberBookings = lazy(() => import("./pages/member/MyBookings"));
+const MemberCheckoutReturn = lazy(() => import("./pages/member/CheckoutReturn"));
 const Index = import.meta.env.VITE_LIVE_DATA_ONLY === "true" ? NoPage : lazy(() => import("./pages/Index"));
 const Schedule = import.meta.env.VITE_LIVE_DATA_ONLY === "true" ? NoPage : lazy(() => import("./pages/Schedule"));
 const MySchedule = import.meta.env.VITE_LIVE_DATA_ONLY === "true" ? NoPage : lazy(() => import("./pages/MySchedule"));
@@ -179,6 +185,11 @@ const App = () => (
                   {/* ---- Public studio storefront (slug-driven; what per-studio
                        subdomains will render). Gated on studios.discoverable. ---- */}
                   <Route path="/s/:slug" element={<StudioStorefront />} />
+                  <Route path="/s/:slug/schedule" element={<MemberSchedule />} />
+                  <Route path="/s/:slug/class/:occurrenceId" element={<MemberClassDetail />} />
+                  <Route path="/s/:slug/plans" element={<MemberPlans />} />
+                  <Route path="/s/:slug/my" element={<MemberBookings />} />
+                  <Route path="/s/:slug/checkout/:outcome" element={<MemberCheckoutReturn />} />
 
                   {/* ---- Blog (built but not yet linked in nav; noindex until
                        BLOG_PUBLISHED is flipped on in src/config/blog.ts) ---- */}

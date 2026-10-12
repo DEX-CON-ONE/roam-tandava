@@ -20,7 +20,8 @@
     "build:marketing": "VITE_BLOG_GAMES=true npm run build",
     "test:editorial": "vitest run --config editorial/vitest.config.ts",
     "typecheck:editorial": "tsc -p editorial/tsconfig.json",
-    "check:blog-game-build": "node scripts/check-blog-game-build.mjs"
+    "check:blog-game-build": "node scripts/check-blog-game-build.mjs",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@fontsource/dm-sans": "^5.2.8",
@@ -90,6 +91,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.32.0",
+    "@playwright/test": "^1.64.0",
     "@tailwindcss/typography": "^0.5.16",
     "@types/node": "^22.16.5",
     "@types/react": "^18.3.23",

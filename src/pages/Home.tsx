@@ -1,4 +1,4 @@
-import { lazy } from "react";
+import { lazy, useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { hasPermission } from "@/types/roles";
@@ -7,6 +7,7 @@ import { getRootRedirect } from "@/lib/root-redirect";
 import { RootRedirect } from "@/components/RootRedirect";
 import { LIVE_DATA_ONLY } from "@/config/live-screens";
 import { NotAvailableYet } from "@/components/LiveOnly";
+import { defaultMemberHome, peekNext, takeNext } from "@/lib/member/next";
 
 const NoPage = () => null;
 const Demo = import.meta.env.VITE_ROOT_REDIRECT_URL ? NoPage : lazy(() => import("./Demo"));
@@ -28,6 +29,11 @@ const StudioStorefront = lazy(() => import("./StudioStorefront"));
  */
 export default function Home() {
   const { isDemoMode, isLoading, user, profile, permissions } = useAuth();
+  // Where a visitor was heading before sign-in (a class, a pass), else the
+  // deployment's default studio. Read once; cleared after it has been used.
+  const [pendingNext] = useState(() => peekNext());
+  useEffect(() => { if (user && pendingNext) takeNext(); }, [user, pendingNext]);
+  const memberDestination = pendingNext ?? (hasPermission(permissions, "studio.manage_schedule") ? null : defaultMemberHome());
 
   // Per-studio subdomain (e.g. oxatl.tandavastudio.com) → that studio's public
   // storefront. Off unless VITE_ROOT_DOMAIN is configured, so this never fires
@@ -52,7 +58,7 @@ export default function Home() {
   // A signed-in user whose profile has not loaded stays inside the app.
   const rootRedirect = getRootRedirect();
   if (!profile && rootRedirect) {
-    return user ? (LIVE_DATA_ONLY ? <NotAvailableYet /> : <Navigate to="/schedule" replace />) : <RootRedirect target={rootRedirect} />;
+    return user ? (memberDestination ? <Navigate to={memberDestination} replace /> : LIVE_DATA_ONLY ? <NotAvailableYet /> : <Navigate to="/schedule" replace />) : <RootRedirect target={rootRedirect} />;
   }
 
   // Anonymous visitor → the platform landing.
@@ -61,6 +67,7 @@ export default function Home() {
   // Live-data-only builds: the dashboards still render sample data, so an owner
   // goes to studio setup and everyone else sees the empty state.
   if (LIVE_DATA_ONLY) {
+    if (memberDestination) return <Navigate to={memberDestination} replace />;
     return hasPermission(permissions, "studio.manage_schedule")
       ? <Navigate to="/manage/onboarding" replace />
       : <NotAvailableYet />;
