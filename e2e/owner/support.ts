@@ -24,6 +24,8 @@ export const PASSWORD = "e2e-Passw0rd-local";
 export interface StackEnv {
   API_URL: string;
   ANON_KEY: string;
+  /** The local mail catcher that receives Auth emails. */
+  MAIL_URL: string;
 }
 
 let cached: StackEnv | null = null;
@@ -40,7 +42,8 @@ export function stackEnv(): StackEnv {
   if (!values.API_URL || !values.ANON_KEY) {
     throw new Error(`The local Supabase stack is not running in ${STACK_DIR}. Start it with scripts/e2e-stack.sh up`);
   }
-  cached = { API_URL: values.API_URL, ANON_KEY: values.ANON_KEY };
+  const mail = values.MAILPIT_URL ?? values.INBUCKET_URL ?? values.API_URL.replace(/:(\d+)$/, (_all, port: string) => `:${Number(port) + 3}`);
+  cached = { API_URL: values.API_URL, ANON_KEY: values.ANON_KEY, MAIL_URL: mail };
   return cached;
 }
 
@@ -81,12 +84,34 @@ export async function signIn(email: string): Promise<ApiUser> {
   return { client, id: data.user.id, token: data.session.access_token };
 }
 
-/** Registers through the Auth API (the same call the register page makes). */
+/**
+ * The confirmation link Supabase Auth emailed to this address, read from the
+ * local stack's mail catcher (nothing is sent anywhere real).
+ */
+export async function confirmationLink(email: string): Promise<string> {
+  const mail = stackEnv().MAIL_URL;
+  const deadline = Date.now() + 30_000;
+  for (;;) {
+    const list = (await (await fetch(`${mail}/api/v1/search?query=${encodeURIComponent(`to:${email}`)}`)).json()) as { messages?: { ID: string }[] };
+    const id = list.messages?.[0]?.ID;
+    if (id) {
+      const message = (await (await fetch(`${mail}/api/v1/message/${id}`)).json()) as { HTML?: string; Text?: string };
+      const link = /https?:\/\/[^\s"'<>]+\/auth\/v1\/verify[^\s"'<>]+/.exec(`${message.HTML ?? ""} ${message.Text ?? ""}`)?.[0];
+      if (link) return link.replace(/&amp;/g, "&");
+    }
+    if (Date.now() > deadline) throw new Error(`No confirmation email arrived for ${email}`);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+}
+
+/** Registers through the Auth API (the same call the register page makes), confirms the email, signs in. */
 export async function signUp(email: string, firstName: string, lastName: string): Promise<ApiUser> {
   const client = anonClient();
   const { data, error } = await client.auth.signUp({ email, password: PASSWORD, options: { data: { first_name: firstName, last_name: lastName } } });
-  if (error || !data.session || !data.user) throw new Error(`sign-up failed for ${email}: ${error?.message}`);
-  return { client, id: data.user.id, token: data.session.access_token };
+  if (error || !data.user) throw new Error(`sign-up failed for ${email}: ${error?.message}`);
+  if (data.session) throw new Error("Email confirmation is off in the test stack; it must be on, as in production");
+  await fetch(await confirmationLink(email), { redirect: "manual" });
+  return signIn(email);
 }
 
 /** Calls an Edge Function as a signed-in user. */

@@ -18,14 +18,15 @@
  */
 
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
-import { PASSWORD, anonClient, callFunction, dateInZone, deliverCheckoutCompleted, signIn, signUp, sql, sqlFails } from "./support";
+import { PASSWORD, anonClient, callFunction, confirmationLink, dateInZone, deliverCheckoutCompleted, signIn, signUp, sql, sqlFails } from "./support";
 
 const run = Date.now().toString(36);
 const OWNER = { email: `owner-${run}@e2e.example.test`, first: "Olive", last: "Owner" };
 const INTRUDER = { email: `intruder-${run}@e2e.example.test`, first: "Ivan", last: "Intruder" };
 const LATE = { email: `late-${run}@e2e.example.test`, first: "Lara", last: "Latecomer" };
 const MEMBER = { email: `member-${run}@e2e.example.test`, first: "Mia", last: "Member" };
-const STUDIO = { name: "E2E Athletics", slug: "e2e-athletics", timezone: "Europe/London" };
+// What the ROAM build of the wizard proposes, and what the owner accepts.
+const STUDIO = { name: "ROAM Athletics", slug: "roam", timezone: "Europe/London", primary: "#b66d3b", secondary: "#313b32" };
 
 let ownerContext: BrowserContext;
 let owner: Page;
@@ -48,15 +49,18 @@ async function register(page: Page, person: { email: string; first: string; last
   await page.locator("#password").fill(PASSWORD);
   await page.locator("#terms").click();
   await page.locator('button[type="submit"]').click();
-  // The welcome screen replaces the form once the account exists and is signed in.
+  // Email confirmation is on, as it is in production: the form is replaced by
+  // "check your email", and the account has no session until the link is followed.
   await expect(page.locator("#firstName")).toHaveCount(0);
-  await expect(page.getByRole("heading", { level: 1 })).toContainText(person.first);
+  await page.goto(await confirmationLink(person.email));
+  // The link comes back to "/" signed in; the app then sends the user on.
+  await expect(page).not.toHaveURL(/\/auth\/v1\/verify|[#?&]access_token=/);
 }
 
 async function expectTurnedAway(page: Page, path: string) {
+  // Sent to where every member goes: the studio's schedule, never an owner screen.
   await page.goto(path);
-  await expect(page.getByRole("heading", { name: "Not available yet" })).toBeVisible();
-  expect(new URL(page.url()).pathname).toBe("/");
+  await expect(page).toHaveURL(new RegExp(`/s/${STUDIO.slug}/schedule$`));
 }
 
 const nav = (page: Page, name: string) => page.getByRole("navigation").getByRole("link", { name, exact: true });
@@ -87,7 +91,7 @@ test.afterAll(async () => {
 });
 
 test("a visitor who is not signed in is sent to sign-in from every owner screen", async ({ page }) => {
-  for (const path of ["/manage", "/manage/schedule", "/manage/offerings", "/manage/students", "/manage/financials", "/manage/onboarding"]) {
+  for (const path of ["/manage", "/manage/schedule", "/manage/offerings", "/manage/students", "/manage/financials", "/manage/settings", "/manage/onboarding"]) {
     await page.goto(path);
     await expect(page).toHaveURL(/\/auth\/login$/);
   }
@@ -112,35 +116,99 @@ test("before a studio exists, an account that is not allow-listed cannot create 
   expect(sql("SELECT COUNT(*) FROM studios")).toBe("0");
 });
 
-test("the allow-listed owner registers and completes the setup wizard", async () => {
+test("the allow-listed owner registers, confirms their email, and the wizard saves what it shows", async () => {
   await register(owner, OWNER);
-  await owner.goto("/");
   await expect(owner).toHaveURL(/\/manage\/onboarding$/);
   await expect(owner.getByRole("heading", { name: "Studio Setup" })).toBeVisible();
   await expect(owner.getByText("Restoring your progress")).toHaveCount(0);
 
+  // The ROAM build starts from ROAM's own details, not another country's defaults.
+  await expect(owner.locator("#studioName")).toHaveValue(STUDIO.name);
+  await expect(owner.locator("#studioSlug")).toHaveValue(STUDIO.slug);
+  await expect(owner.locator("#studioEmail")).toHaveValue(OWNER.email);
+  await expect(owner.getByRole("combobox").nth(0)).toContainText("UK (London)");
+  await expect(owner.getByRole("combobox").nth(1)).toContainText("GBP");
+
+  // Studio Info cannot be saved without a name or a contact email: no studio appears.
+  await owner.locator("#studioName").fill("");
+  await owner.locator("#studioEmail").fill("not-an-email");
+  await owner.getByRole("button", { name: /Save & Continue/ }).click();
+  await expect(owner.getByText("Enter the studio's name.").first()).toBeVisible();
+  await expect(owner.getByText("Enter a contact email address.").first()).toBeVisible();
+  await expect(owner.getByRole("heading", { name: "Studio Information" })).toBeVisible();
+  expect(sql("SELECT COUNT(*) FROM studios")).toBe("0");
+  // Nor can it be launched before it exists.
+  await owner.getByRole("button", { name: "Launch", exact: true }).click();
+  await owner.getByRole("button", { name: "Launch Studio" }).click();
+  await expect(owner.getByRole("heading", { name: "Studio Information" })).toBeVisible();
+  expect(sql("SELECT COUNT(*) FROM studios")).toBe("0");
+  // The server refuses the same thing if the screen is bypassed.
+  const ownerApi = await signIn(OWNER.email);
+  expect((await callFunction(ownerApi, "onboarding", { step: "studio", data: { timezone: "America/Los_Angeles" } })).status).toBe(400);
+  expect((await callFunction(ownerApi, "onboarding", { step: "studio", data: { studioName: "No Email Studio" } })).status).toBe(400);
+  expect(sql("SELECT COUNT(*) FROM studios")).toBe("0");
+
+  // Step 1: name, contact email, description; timezone and currency left as proposed.
   await owner.locator("#studioName").fill(STUDIO.name);
+  await owner.locator("#studioEmail").fill("Hello@E2E.example.test");
   await owner.locator("#studioDesc").fill("Strength and conditioning for the end-to-end test.");
-  await owner.getByRole("combobox").nth(0).click();
-  await owner.getByRole("option", { name: "UK (London)" }).click();
-  await owner.getByRole("combobox").nth(1).click();
-  await owner.getByRole("option", { name: "GBP" }).click();
+  await expect(owner.locator("#studioSlug")).toHaveValue(STUDIO.slug);
   await owner.getByRole("button", { name: /Save & Continue/ }).click();
   await expect(owner.getByRole("heading", { name: "Location" })).toBeVisible();
+  expect(sql("SELECT name || '|' || slug || '|' || email || '|' || timezone || '|' || currency || '|' || description FROM studios"))
+    .toBe(`${STUDIO.name}|${STUDIO.slug}|hello@e2e.example.test|${STUDIO.timezone}|GBP|Strength and conditioning for the end-to-end test.`);
 
+  // Step 2: location. No sample rooms are pre-filled.
+  await expect(owner.locator("#rooms")).toHaveValue("");
+  await owner.locator("#locationName").fill("ROAM Athletic Club");
   await owner.locator("#address").fill("1 Test Lane, Farnham");
-  await owner.locator("#rooms").fill("Main room");
+  await owner.locator("#amenities").fill("Parking, Showers");
   await owner.getByRole("button", { name: /Save & Continue/ }).click();
   await expect(owner.getByRole("heading", { name: "Branding" })).toBeVisible();
+  expect(sql("SELECT name || '|' || address_line1 || '|' || rooms::text || '|' || array_to_string(amenities, ',') FROM locations"))
+    .toBe("ROAM Athletic Club|1 Test Lane, Farnham|[]|Parking,Showers");
 
+  // Step 3: the brand palette is proposed. The save's follow-up refresh is held
+  // back, so it lands while the owner is already on the Launch step: it must not
+  // undo what they switch there (it used to reset the listing switch to "off").
+  await expect(owner.locator('input[type="color"]').nth(0)).toHaveValue(STUDIO.primary);
+  await expect(owner.locator('input[type="color"]').nth(1)).toHaveValue(STUDIO.secondary);
+  await owner.route("**/functions/v1/onboarding", async (route) => {
+    if (route.request().postData()?.includes('"status"')) await new Promise((resolve) => setTimeout(resolve, 2000));
+    await route.continue();
+  });
+  const refreshed = owner.waitForResponse((response) => response.url().includes("/functions/v1/onboarding") && (response.request().postData() ?? "").includes('"status"'));
+  await owner.getByRole("button", { name: /Save & Continue/ }).click();
   await owner.getByRole("button", { name: "Launch", exact: true }).click();
   await expect(owner.getByRole("heading", { name: "Ready to Launch" })).toBeVisible();
-  await owner.getByRole("switch").click();
+  const listing = owner.getByRole("switch");
+  await listing.click();
+  await expect(listing).toBeChecked();
+  await refreshed;
+  await owner.waitForTimeout(300);
+  await expect(listing).toBeChecked();
+  await owner.unroute("**/functions/v1/onboarding");
   await owner.getByRole("button", { name: "Launch Studio" }).click();
   await expect(owner).toHaveURL(/\/manage$/);
 
-  expect(sql("SELECT slug || '|' || timezone || '|' || currency || '|' || discoverable FROM studios")).toBe(`${STUDIO.slug}|${STUDIO.timezone}|GBP|true`);
+  // Everything the owner saw and accepted is what the studio row holds.
+  expect(sql("SELECT name || '|' || slug || '|' || email || '|' || timezone || '|' || currency || '|' || discoverable || '|' || brand_primary_color || '|' || brand_secondary_color FROM studios"))
+    .toBe(`${STUDIO.name}|${STUDIO.slug}|hello@e2e.example.test|${STUDIO.timezone}|GBP|true|${STUDIO.primary}|${STUDIO.secondary}`);
   expect(sql(`SELECT role FROM studio_staff ss JOIN profiles p ON p.id = ss.profile_id WHERE p.email = '${OWNER.email}'`)).toBe("owner");
+  // Skipped steps created nothing: no class, no price, no pack, no membership.
+  expect(sql("SELECT (SELECT COUNT(*) FROM offerings) + (SELECT COUNT(*) FROM class_pack_types) + (SELECT COUNT(*) FROM membership_types)")).toBe("0");
+
+  // Coming back later, the wizard shows what was saved, not the defaults.
+  await owner.goto("/manage/onboarding");
+  await expect(owner.getByText("Restoring your progress")).toHaveCount(0);
+  await owner.getByRole("button", { name: "Studio Info", exact: true }).click();
+  await expect(owner.locator("#studioName")).toHaveValue(STUDIO.name);
+  await expect(owner.locator("#studioEmail")).toHaveValue("hello@e2e.example.test");
+  await expect(owner.locator("#studioSlug")).toBeDisabled();
+  await owner.getByRole("button", { name: "Location", exact: true }).click();
+  await expect(owner.locator("#locationName")).toHaveValue("ROAM Athletic Club");
+  await expect(owner.locator("#address")).toHaveValue("1 Test Lane, Farnham");
+  await owner.goto("/manage");
 });
 
 test("a new studio's dashboard shows real zeroes and empty states", async () => {
@@ -269,6 +337,67 @@ test("the owner sets a drop-in price, a class pack and a membership, and sees St
   expect(sql("SELECT billing_cycle || '|' || price_cents || '|' || COALESCE(classes_per_cycle::text, 'unlimited') FROM membership_types")).toBe("monthly|9000|unlimited");
 });
 
+test("the owner corrects the studio's details in Settings", async () => {
+  await nav(owner, "Settings").click();
+  await expect(owner.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
+  await expect(owner.locator("#settings-name")).toHaveValue(STUDIO.name);
+  await expect(owner.locator("#settings-slug")).toHaveValue(STUDIO.slug);
+  await expect(owner.locator("#settings-email")).toHaveValue("hello@e2e.example.test");
+  await expect(owner.locator("#settings-timezone")).toHaveValue(STUDIO.timezone);
+  await expect(owner.locator("#settings-window")).toHaveValue("2");
+  await expect(owner.locator("#settings-listed")).toBeChecked();
+  const save = owner.getByRole("button", { name: "Save settings" });
+  await expect(save).toBeDisabled();
+
+  // Invalid values cannot be saved.
+  await owner.locator("#settings-slug").fill("x");
+  await expect(save).toBeDisabled();
+  await owner.locator("#settings-slug").fill(STUDIO.slug);
+  await owner.locator("#settings-name").fill("");
+  await expect(save).toBeDisabled();
+  await owner.locator("#settings-primary").fill("orange");
+  await expect(save).toBeDisabled();
+
+  // Change every field, save, and read the row back.
+  await owner.locator("#settings-name").fill("ROAM Athletic Club");
+  await owner.locator("#settings-slug").fill("Roam Club");
+  await expect(owner.locator("#settings-slug")).toHaveValue("roam-club");
+  await owner.locator("#settings-email").fill("Studio@E2E.example.test");
+  await owner.locator("#settings-timezone").selectOption("Europe/Dublin");
+  await owner.locator("#settings-window").fill("24");
+  await owner.locator("#settings-listed").click();
+  await owner.locator("#settings-primary").fill("#112233");
+  await owner.locator("#settings-secondary").fill("#445566");
+  await save.click();
+  await expect(owner.getByText("Settings saved").first()).toBeVisible();
+  const row = "SELECT name || '|' || slug || '|' || email || '|' || timezone || '|' || default_cancellation_minutes || '|' || discoverable || '|' || brand_primary_color || '|' || brand_secondary_color FROM studios";
+  expect(sql(row)).toBe("ROAM Athletic Club|roam-club|studio@e2e.example.test|Europe/Dublin|1440|false|#112233|#445566");
+  // A hidden studio's booking page is gone for the public.
+  expect((await anonClient().rpc("get_studio_storefront", { p_slug: "roam-club" })).data).toBeNull();
+
+  // Put it back the way the rest of the story expects, through the same screen.
+  await owner.locator("#settings-name").fill(STUDIO.name);
+  await owner.locator("#settings-slug").fill(STUDIO.slug);
+  await owner.locator("#settings-email").fill("hello@e2e.example.test");
+  await owner.locator("#settings-timezone").selectOption(STUDIO.timezone);
+  await owner.locator("#settings-window").fill("2");
+  await owner.locator("#settings-listed").click();
+  await owner.locator("#settings-primary").fill(STUDIO.primary);
+  await owner.locator("#settings-secondary").fill(STUDIO.secondary);
+  await save.click();
+  await expect(save).toBeDisabled();
+  expect(sql(row)).toBe(`${STUDIO.name}|${STUDIO.slug}|hello@e2e.example.test|${STUDIO.timezone}|120|true|${STUDIO.primary}|${STUDIO.secondary}`);
+
+  // The database refuses what the screen refuses.
+  const api = await signIn(OWNER.email);
+  const studioId = sql("SELECT id FROM studios");
+  const base = { p_studio_id: studioId, p_name: STUDIO.name, p_slug: STUDIO.slug, p_email: "hello@e2e.example.test", p_timezone: STUDIO.timezone, p_cancellation_minutes: 120, p_discoverable: true, p_primary_color: STUDIO.primary, p_secondary_color: STUDIO.secondary };
+  for (const bad of [{ p_name: "  " }, { p_slug: "Not A Slug" }, { p_email: "nope" }, { p_timezone: "Mars/Olympus" }, { p_cancellation_minutes: -5 }, { p_primary_color: "red" }]) {
+    expect((await api.client.rpc("manage_update_studio", { ...base, ...bad })).error, JSON.stringify(bad)).not.toBeNull();
+  }
+  expect(sql(row)).toBe(`${STUDIO.name}|${STUDIO.slug}|hello@e2e.example.test|${STUDIO.timezone}|120|true|${STUDIO.primary}|${STUDIO.secondary}`);
+});
+
 test("an anonymous visitor sees the class, prices and schedule on the public booking page", async ({ browser }) => {
   const context = await browser.newContext();
   const page = await context.newPage();
@@ -373,7 +502,7 @@ test("a member's purchase arrives through the Stripe webhook; the owner books th
 
 test("with the studio in place, other accounts cannot reach /manage or the studio's data", async ({ browser }) => {
   // The earlier account, still signed in.
-  for (const path of ["/manage/onboarding", "/manage", "/manage/schedule", "/manage/offerings", "/manage/students", "/manage/financials"]) {
+  for (const path of ["/manage/onboarding", "/manage", "/manage/schedule", "/manage/offerings", "/manage/students", "/manage/financials", "/manage/settings"]) {
     await expectTurnedAway(intruder, path);
   }
 
@@ -412,6 +541,7 @@ test("with the studio in place, other accounts cannot reach /manage or the studi
     expect((await api.client.from("offerings").update({ drop_in_price_cents: 1 }).eq("id", offeringId).select()).data ?? [], email).toHaveLength(0);
     expect((await api.client.from("class_pack_types").update({ price_cents: 1 }).eq("studio_id", studioId).select()).data ?? [], email).toHaveLength(0);
     expect((await api.client.from("studios").update({ discoverable: false }).eq("id", studioId).select()).data ?? [], email).toHaveLength(0);
+    expect((await api.client.rpc("manage_update_studio", { p_studio_id: studioId, p_name: "Taken over", p_slug: "taken-over", p_email: email, p_timezone: "Europe/London", p_cancellation_minutes: 0, p_discoverable: false, p_primary_color: "#000000", p_secondary_color: "#000000" })).error, email).not.toBeNull();
     expect((await api.client.from("studio_staff").insert({ studio_id: studioId, profile_id: api.id, role: "owner" })).error, email).not.toBeNull();
     expect((await api.client.rpc("manage_create_session", { p_offering_id: offeringId, p_location_id: studioId, p_teacher_id: null, p_date: dateInZone(3, STUDIO.timezone), p_start_time: "10:00" })).error, email).not.toBeNull();
     expect((await api.client.rpc("manage_cancel_session", { p_occurrence_id: occurrenceId })).error, email).not.toBeNull();
@@ -423,6 +553,7 @@ test("with the studio in place, other accounts cannot reach /manage or the studi
   // Nothing above changed anything.
   expect(sql("SELECT COUNT(*) FROM studios")).toBe("1");
   expect(sql("SELECT COUNT(*) FROM studio_staff")).toBe("1");
+  expect(sql("SELECT name || '|' || slug || '|' || discoverable FROM studios")).toBe(`${STUDIO.name}|${STUDIO.slug}|true`);
   expect(sql("SELECT drop_in_price_cents FROM offerings")).toBe("1600");
   expect(sql("SELECT status FROM bookings")).toBe("checked_in");
   // A non-allow-listed account cannot be made an owner even with database-owner rights.
@@ -452,6 +583,7 @@ test("the owner screens fit a phone", async ({ browser }) => {
     ["/manage/students", "Members"],
     [`/manage/members/${memberId}`, "Member"],
     ["/manage/financials", "Payments"],
+    ["/manage/settings", "Settings"],
   ];
   for (const [path, heading] of screens) {
     await page.goto(path);

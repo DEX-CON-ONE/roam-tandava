@@ -21,6 +21,10 @@ import {
 } from "lucide-react";
 import { brand } from "@/config/brand";
 import { LIVE_DATA_ONLY, isLiveRoute } from "@/config/live-screens";
+import { CURRENCY_OPTIONS, TIMEZONE_OPTIONS, slugFromName, studioInfoProblems, wizardDefaults, withOption } from "@/lib/owner/studio-defaults";
+
+// What a new studio starts from: this build's own brand on a white-labelled build.
+const DEFAULTS = wizardDefaults(brand, import.meta.env as unknown as Record<string, string | undefined>);
 
 const STEPS = [
   { key: "studio", label: "Studio Info", icon: Building2 },
@@ -54,8 +58,9 @@ const emptyStaffRow = (): StaffRow => ({ name: "", email: "", role: "teacher", p
 interface OnboardingStatus {
   studioId: string | null;
   studio?: {
-    name?: string; description?: string; timezone?: string; currency?: string;
-    primaryColor?: string; secondaryColor?: string; discoverable?: boolean; address?: string;
+    name?: string; slug?: string; email?: string | null; description?: string | null; timezone?: string; currency?: string;
+    primaryColor?: string; secondaryColor?: string; discoverable?: boolean; address?: string | null;
+    locationName?: string | null; amenities?: string | null;
   } | null;
   completedSteps?: string[];
   currentStep?: string;
@@ -86,15 +91,16 @@ function StepCard({ title, desc, children }: { title: string; desc: string; chil
   );
 }
 
-function Field({ label, id, value, onChange, ...props }: {
+function Field({ label, id, value, onChange, error, hint, ...props }: {
   label: string; id: string; value: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  placeholder?: string; type?: string;
+  placeholder?: string; type?: string; error?: string; hint?: string; disabled?: boolean;
 }) {
   return (
     <div className="space-y-2">
       <Label htmlFor={id}>{label}</Label>
-      <Input id={id} value={value} onChange={onChange} {...props} />
+      <Input id={id} value={value} onChange={onChange} aria-invalid={Boolean(error)} {...props} />
+      {error ? <p className="text-xs text-destructive" role="alert">{error}</p> : hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
     </div>
   );
 }
@@ -120,18 +126,21 @@ export default function Onboarding() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { refreshProfile } = useAuth();
+  const { refreshProfile, user } = useAuth();
   // Fixed at build/config time: real backend vs demo dry-run.
   const production = isBackendConfigured();
   const [step, setStep] = useState(0);
   const [done, setDone] = useState<Set<number>>(new Set());
   const [f, setF] = useState<Record<string, string>>({
-    timezone: "America/Los_Angeles", currency: "USD", rooms: "Main Studio, Hot Room",
+    studioName: DEFAULTS.studioName,
+    timezone: DEFAULTS.timezone, currency: DEFAULTS.currency, rooms: DEFAULTS.rooms,
     classStyle: "General", classLevel: "all", classDuration: "60", classCapacity: "25",
-    classPrice: "25", schedDay: "monday", schedTime: "09:00", memberCycle: "monthly",
+    classPrice: DEFAULTS.classPrice, schedDay: "monday", schedTime: "09:00", memberCycle: "monthly",
     packClasses: "10", waiverName: "Liability Waiver",
-    primaryColor: "#4fd1c5", secondaryColor: "#f687b3",
+    primaryColor: DEFAULTS.primaryColor, secondaryColor: DEFAULTS.secondaryColor,
   });
+  // Shown under the Studio Info fields once the owner has tried to save.
+  const [showProblems, setShowProblems] = useState(false);
   const [memberUnlimited, setMemberUnlimited] = useState(true);
   const [discoverable, setDiscoverable] = useState(false);
   const [staffList, setStaffList] = useState<StaffRow[]>([emptyStaffRow()]);
@@ -209,17 +218,25 @@ export default function Onboarding() {
     setTeachers(status.staff ?? []);
     setRooms(status.rooms ?? []);
 
-    if (status.studio) {
+    // What the server has saved is loaded into the form once, when the wizard
+    // opens. Later refreshes (after each save) only update the lists above:
+    // re-applying saved values then would overwrite whatever the owner has
+    // typed or switched since, such as the listing switch on the Launch step.
+    if (status.studio && restoreCursor) {
       const s = status.studio;
       setF((p) => ({
         ...p,
-        studioName: p.studioName ?? s.name ?? "",
-        studioDesc: p.studioDesc ?? s.description ?? "",
+        studioName: s.name ?? p.studioName ?? "",
+        studioSlug: s.slug ?? p.studioSlug,
+        studioEmail: s.email ?? p.studioEmail ?? "",
+        studioDesc: s.description ?? p.studioDesc ?? "",
         timezone: s.timezone ?? p.timezone,
         currency: s.currency ?? p.currency,
         primaryColor: s.primaryColor ?? p.primaryColor,
         secondaryColor: s.secondaryColor ?? p.secondaryColor,
-        address: p.address ?? s.address ?? "",
+        address: s.address ?? p.address ?? "",
+        locationName: s.locationName ?? p.locationName ?? "",
+        amenities: s.amenities ?? p.amenities ?? "",
       }));
       if (typeof s.discoverable === "boolean") setDiscoverable(s.discoverable);
     }
@@ -286,6 +303,15 @@ export default function Onboarding() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
+  useEffect(() => {
+    const email = user?.email;
+    if (email) setF((p) => (p.studioEmail === undefined ? { ...p, studioEmail: email } : p));
+  }, [user?.email]);
+
+  // The booking page address follows the studio name until the owner edits it.
+  const studioSlug = f.studioSlug ?? (DEFAULTS.studioSlug && f.studioName === DEFAULTS.studioName ? DEFAULTS.studioSlug : slugFromName(f.studioName ?? ""));
+  const studioProblems = studioInfoProblems({ name: f.studioName ?? "", email: f.studioEmail ?? "", slug: studioSlug });
+
   const stepPayload = (): Record<string, unknown> => {
     if (STEPS[step].key === "staff") {
       return { staff: staffList.filter((s) => s.name.trim() || s.email.trim()) };
@@ -293,17 +319,25 @@ export default function Onboarding() {
     if (STEPS[step].key === "launch") {
       return { ...f, memberUnlimited, discoverable };
     }
-    return { ...f, memberUnlimited };
+    return { ...f, studioSlug, memberUnlimited };
   };
 
   const handleSave = async () => {
+    if (STEPS[step].key === "studio" && Object.keys(studioProblems).length > 0) {
+      setShowProblems(true);
+      toast({ title: "Studio Info is not complete", description: Object.values(studioProblems)[0], variant: "destructive" });
+      return;
+    }
+    // The step being saved. The owner can move to another step while the save
+    // is in flight, so everything below refers to this one, not the current one.
+    const saved = step;
     // Persist the step server-side when a backend is configured; demo just advances.
     let invited: number | undefined;
     if (isBackendConfigured()) {
       setSaving(true);
-      const isFirstStudioSave = STEPS[step].key === "studio" && !studioId;
+      const isFirstStudioSave = STEPS[saved].key === "studio" && !studioId;
       const { data, error } = await api.invoke<StepResult>("onboarding", {
-        step: STEPS[step].key,
+        step: STEPS[saved].key,
         data: stepPayload(),
       });
       setSaving(false);
@@ -327,14 +361,15 @@ export default function Onboarding() {
       // Refresh offerings/staff/rooms so later steps see what was just created.
       void refreshStatus();
     }
-    setDone((prev) => new Set([...prev, step]));
+    setDone((prev) => new Set([...prev, saved]));
     toast({
-      title: `${STEPS[step].label} saved`,
+      title: `${STEPS[saved].label} saved`,
       description: invited
         ? `${invited} invitation${invited === 1 ? "" : "s"} sent. Your progress has been saved.`
         : "Your progress has been saved.",
     });
-    if (step < STEPS.length - 1) setStep(step + 1);
+    // Move on only if the owner is still on the step that was saved.
+    setStep((current) => (current === saved && saved < STEPS.length - 1 ? saved + 1 : current));
   };
 
   const handleSkip = () => {
@@ -361,6 +396,11 @@ export default function Onboarding() {
   };
 
   const handleLaunch = async () => {
+    if (isBackendConfigured() && !studioId) {
+      toast({ title: "Save Studio Info first", description: "The studio is created when you save the first step.", variant: "destructive" });
+      setStep(0);
+      return;
+    }
     setLaunching(true);
     if (isBackendConfigured()) {
       const { error } = await api.invoke("onboarding", { step: "launch", data: stepPayload() });
@@ -394,22 +434,33 @@ export default function Onboarding() {
     switch (step) {
       case 0: return (
         <StepCard title="Studio Information" desc="Tell us about your studio to get started">
-          <Field label="Studio Name" id="studioName" placeholder="e.g. Your studio name" value={f.studioName ?? ""} onChange={set("studioName")} />
+          <Field label="Studio Name" id="studioName" placeholder="e.g. Your studio name" value={f.studioName ?? ""} onChange={set("studioName")} error={showProblems ? studioProblems.name : undefined} />
+          <Field label="Contact Email" id="studioEmail" type="email" placeholder="hello@example.com" value={f.studioEmail ?? ""} onChange={set("studioEmail")} error={showProblems ? studioProblems.email : undefined} hint="Shown to members and used for booking notifications." />
+          <Field
+            label="Booking page address"
+            id="studioSlug"
+            value={studioSlug}
+            onChange={(e) => setF((p) => ({ ...p, studioSlug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-") }))}
+            disabled={production && Boolean(studioId)}
+            error={showProblems && !studioId ? studioProblems.slug : undefined}
+            hint={production && studioId ? `Your booking page is /s/${studioSlug}. Change it in Settings.` : `Members will book at /s/${studioSlug || "your-studio"}.`}
+          />
           <div className="space-y-2">
             <Label htmlFor="studioDesc">Description</Label>
             <Textarea id="studioDesc" placeholder="A brief description of your studio..." value={f.studioDesc ?? ""} onChange={set("studioDesc")} rows={3} />
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <Sel label="Timezone" value={f.timezone ?? ""} onChange={sel("timezone")} options={[["Europe/London","UK (London)"],["Europe/Dublin","Ireland (Dublin)"],["Europe/Paris","Central Europe (Paris)"],["America/New_York","Eastern (ET)"],["America/Chicago","Central (CT)"],["America/Denver","Mountain (MT)"],["America/Los_Angeles","Pacific (PT)"],["Australia/Sydney","Australia (Sydney)"]]} />
-            <Sel label="Currency" value={f.currency ?? ""} onChange={sel("currency")} options={[["USD","USD ($)"],["EUR","EUR"],["GBP","GBP"],["CAD","CAD"]]} />
+            <Sel label="Timezone" value={f.timezone ?? ""} onChange={sel("timezone")} options={withOption(TIMEZONE_OPTIONS, f.timezone ?? "")} />
+            <Sel label="Currency" value={f.currency ?? ""} onChange={sel("currency")} options={withOption(CURRENCY_OPTIONS, f.currency ?? "")} />
           </div>
         </StepCard>
       );
       case 1: return (
         <StepCard title="Location" desc="Where is your studio located?">
-          <Field label="Street Address" id="address" placeholder="123 Main St, San Francisco, CA 94105" value={f.address ?? ""} onChange={set("address")} />
-          <Field label="Rooms (comma-separated)" id="rooms" placeholder="Main Studio, Hot Room" value={f.rooms ?? ""} onChange={set("rooms")} />
-          <Field label="Amenities" id="amenities" placeholder="Showers, Mat Rentals, Changing Rooms, Lockers" value={f.amenities ?? ""} onChange={set("amenities")} />
+          <Field label="Location Name" id="locationName" placeholder={f.studioName || "e.g. Main location"} value={f.locationName ?? ""} onChange={set("locationName")} hint="What members see next to each class. Leave empty to use Main Location." />
+          <Field label="Address" id="address" placeholder="Street, town, postcode" value={f.address ?? ""} onChange={set("address")} />
+          <Field label="Rooms (comma-separated, optional)" id="rooms" placeholder="e.g. Main room, Outdoor area" value={f.rooms ?? ""} onChange={set("rooms")} />
+          <Field label="Amenities (optional)" id="amenities" placeholder="e.g. Showers, Changing rooms, Parking" value={f.amenities ?? ""} onChange={set("amenities")} />
         </StepCard>
       );
       case 2: return (
@@ -425,6 +476,7 @@ export default function Onboarding() {
               </div>
             ))}
           </div>
+          {!production && (<>
           <Separator />
           <div className="space-y-2">
             <Label>Logo</Label>
@@ -434,6 +486,7 @@ export default function Onboarding() {
               <Button variant="outline" size="sm" className="mt-3">Upload Logo</Button>
             </div>
           </div>
+          </>)}
         </StepCard>
       );
       case 3: return (
@@ -446,7 +499,7 @@ export default function Onboarding() {
           <div className="grid grid-cols-3 gap-4">
             <Field label="Duration (min)" id="classDuration" type="number" value={f.classDuration ?? ""} onChange={set("classDuration")} />
             <Field label="Capacity" id="classCapacity" type="number" value={f.classCapacity ?? ""} onChange={set("classCapacity")} />
-            <Field label="Drop-in Price ($)" id="classPrice" type="number" value={f.classPrice ?? ""} onChange={set("classPrice")} />
+            <Field label={`Drop-in Price (${f.currency})`} id="classPrice" type="number" value={f.classPrice ?? ""} onChange={set("classPrice")} />
           </div>
         </StepCard>
       );
@@ -474,7 +527,7 @@ export default function Onboarding() {
             <Sel label="Billing Cycle" value={f.memberCycle ?? ""} onChange={sel("memberCycle")} options={[["monthly","Monthly"],["quarterly","Quarterly"],["annual","Annual"]]} />
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <Field label="Price ($)" id="memberPrice" type="number" placeholder="149" value={f.memberPrice ?? ""} onChange={set("memberPrice")} />
+            <Field label={`Price (${f.currency})`} id="memberPrice" type="number" placeholder="149" value={f.memberPrice ?? ""} onChange={set("memberPrice")} />
             <div className="flex items-center gap-3 pt-6">
               <Switch checked={memberUnlimited} onCheckedChange={setMemberUnlimited} />
               <Label>Unlimited classes</Label>
@@ -485,7 +538,7 @@ export default function Onboarding() {
           <div className="grid grid-cols-3 gap-4">
             <Field label="Pack Name" id="packName" placeholder="e.g. 10-Class Pack" value={f.packName ?? ""} onChange={set("packName")} />
             <Field label="Classes" id="packClasses" type="number" value={f.packClasses ?? ""} onChange={set("packClasses")} />
-            <Field label="Price ($)" id="packPrice" type="number" placeholder="200" value={f.packPrice ?? ""} onChange={set("packPrice")} />
+            <Field label={`Price (${f.currency})`} id="packPrice" type="number" placeholder="200" value={f.packPrice ?? ""} onChange={set("packPrice")} />
           </div>
         </StepCard>
       );
@@ -509,7 +562,7 @@ export default function Onboarding() {
                 <div className="grid grid-cols-3 gap-4">
                   <Sel label="Role" value={member.role} onChange={(v) => updateStaff(i, "role", v)} options={[["teacher","Instructor"],["sub","Substitute"],["admin","Admin"],["front_desk","Front Desk"]]} />
                   <Sel label="Pay Type" value={member.payType} onChange={(v) => updateStaff(i, "payType", v)} options={[["per_class","Per Class"],["hourly","Hourly"],["salary","Salary"]]} />
-                  <Field label="Pay Rate ($)" id={`staffRate-${i}`} type="number" placeholder="75" value={member.payRate} onChange={(e) => updateStaff(i, "payRate", e.target.value)} />
+                  <Field label={`Pay Rate (${f.currency})`} id={`staffRate-${i}`} type="number" placeholder="75" value={member.payRate} onChange={(e) => updateStaff(i, "payRate", e.target.value)} />
                 </div>
               </div>
             ))}
@@ -575,13 +628,16 @@ export default function Onboarding() {
             <div className="flex items-center gap-3">
               <Switch checked={discoverable} onCheckedChange={setDiscoverable} />
               <div>
-                <Label>List my studio in the public directory</Label>
-                <p className="text-xs text-muted-foreground">People browsing {brand.name} can find and book your classes.</p>
+                <Label>{brand.isCustom ? "Make my booking page public" : "List my studio in the public directory"}</Label>
+                <p className="text-xs text-muted-foreground">{brand.isCustom ? `Anyone with the link can see your classes and book: /s/${studioSlug}.` : `People browsing ${brand.name} can find and book your classes.`}</p>
               </div>
             </div>
             <Separator />
             <div className="text-center pt-2">
               <p className="text-sm text-muted-foreground mb-4">{done.size} of {STEPS.length - 1} steps completed</p>
+              {production && !studioId && (
+                <p className="text-sm text-destructive mb-4" role="alert">Save Studio Info first: the studio is created on that step.</p>
+              )}
               <Button size="lg" className="px-8" onClick={handleLaunch} disabled={launching}>
                 {launching ? <Loader2 className="h-4 w-4 me-2 animate-spin" /> : <Rocket className="h-4 w-4 me-2" />}
                 Launch Studio

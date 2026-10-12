@@ -69,10 +69,12 @@ export default function Home() {
   // while the dashboard is not live). An account that may still create the
   // studio goes to setup; everyone else sees the empty state.
   if (LIVE_DATA_ONLY) {
-    if (memberDestination) return <Navigate to={memberDestination} replace />;
-    return hasPermission(permissions, "studio.manage_schedule")
-      ? <Navigate to={isLiveRoute("/manage") ? "/manage" : "/manage/onboarding"} replace />
-      : <StudioSetupRedirect fallback={<NotAvailableYet />} />;
+    if (hasPermission(permissions, "studio.manage_schedule")) {
+      return <Navigate to={memberDestination ?? (isLiveRoute("/manage") ? "/manage" : "/manage/onboarding")} replace />;
+    }
+    // The owner-to-be has no studio role yet and would otherwise be sent to
+    // the default studio's (not yet existing) schedule like any member.
+    return <StudioSetupRedirect fallback={memberDestination ? <Navigate to={memberDestination} replace /> : <NotAvailableYet />} />;
   }
 
   // Signed-in user → their workspace. Owners/admins manage; everyone else books.

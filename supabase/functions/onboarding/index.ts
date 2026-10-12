@@ -50,6 +50,15 @@ function slugify(s: string): string {
     .replace(/^-+|-+$/g, "") || `s-${Date.now()}`;
 }
 
+const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
+/** What the Studio Info step must provide. Returns an error message, or null. */
+function studioInfoError(name: string, email: string): string | null {
+  if (!name) return "Enter the studio's name";
+  if (!EMAIL.test(email)) return "Enter a contact email address for the studio";
+  return null;
+}
+
 const dollarsToCents = (v: unknown) => Math.round(parseFloat(String(v ?? "0")) * 100) || 0;
 const intOf = (v: unknown, d = 0) => parseInt(String(v ?? d), 10) || d;
 
@@ -127,7 +136,7 @@ async function buildStatus(db: SupabaseClient, studioId: string | undefined) {
 
   const [studioRes, progressRes, offeringsRes, staffRes, locationsRes] = await Promise.all([
     db.from("studios")
-      .select("id, name, description, timezone, currency, brand_primary_color, brand_secondary_color, stripe_account_id, stripe_onboarding_complete, discoverable")
+      .select("id, name, slug, email, description, timezone, currency, brand_primary_color, brand_secondary_color, stripe_account_id, stripe_onboarding_complete, discoverable")
       .eq("id", studioId).single(),
     db.from("studio_onboarding")
       .select("completed_steps, current_step, is_launched")
@@ -136,7 +145,7 @@ async function buildStatus(db: SupabaseClient, studioId: string | undefined) {
     db.from("studio_staff")
       .select("profile_id, role, profiles(first_name, last_name, display_name)")
       .eq("studio_id", studioId).eq("is_active", true),
-    db.from("locations").select("address_line1, rooms, is_primary").eq("studio_id", studioId),
+    db.from("locations").select("name, address_line1, rooms, amenities, is_primary").eq("studio_id", studioId).order("is_primary", { ascending: false }),
   ]);
 
   const studio = studioRes.data;
@@ -171,14 +180,17 @@ async function buildStatus(db: SupabaseClient, studioId: string | undefined) {
     studio: studio
       ? {
           name: studio.name,
+          slug: studio.slug,
+          email: studio.email,
           description: studio.description,
           timezone: studio.timezone,
           currency: studio.currency,
           primaryColor: studio.brand_primary_color,
           secondaryColor: studio.brand_secondary_color,
           discoverable: studio.discoverable,
-          address: (locationsRes.data ?? []).find((l) => l.is_primary)?.address_line1
-            ?? locationsRes.data?.[0]?.address_line1 ?? null,
+          address: locationsRes.data?.[0]?.address_line1 ?? null,
+          locationName: locationsRes.data?.[0]?.name ?? null,
+          amenities: Array.isArray(locationsRes.data?.[0]?.amenities) ? (locationsRes.data?.[0]?.amenities as string[]).join(", ") : null,
         }
       : null,
     completedSteps: (progress?.completed_steps ?? []).map(toClientKey),
@@ -364,13 +376,16 @@ serve(async (req) => {
       if (step !== "studio") {
         return json({ error: "Complete the Studio Info step first" }, 409);
       }
-      const name = String(f.studioName ?? "My Studio");
+      const name = String(f.studioName ?? "").trim();
+      const email = String(f.studioEmail ?? "").trim().toLowerCase();
+      const invalid = studioInfoError(name, email);
+      if (invalid) return json({ error: invalid }, 400);
       // One transaction: permission check, studio, owner link. The slug is
       // the studio name; a suffix is added only if that slug is taken.
       const { data: newStudioId, error } = await db.rpc("create_studio_for_owner", {
         p_owner_id: user.id,
         p_name: name,
-        p_slug: slugify(name),
+        p_slug: slugify(String(f.studioSlug ?? "").trim() || name),
         p_description: f.studioDesc ?? null,
         p_timezone: f.timezone ?? "America/New_York",
         p_currency: f.currency ?? "USD",
@@ -382,26 +397,37 @@ serve(async (req) => {
         return json({ error: denied ? "Studio setup is not available for this account" : error?.message ?? "Could not create the studio" }, denied ? 403 : 500);
       }
       studioId = newStudioId as string;
+      const { error: emailErr } = await db.from("studios").update({ email }).eq("id", studioId);
+      if (emailErr) return json({ error: emailErr.message }, 500);
       await recordProgress(db, studioId, "studio_info", true);
       return json({ ok: true, studioId });
     }
 
     switch (step) {
-      case "studio":
-        await db.from("studios").update({
-          name: f.studioName ?? undefined,
+      case "studio": {
+        const name = String(f.studioName ?? "").trim();
+        const email = String(f.studioEmail ?? "").trim().toLowerCase();
+        const invalid = studioInfoError(name, email);
+        if (invalid) return json({ error: invalid }, 400);
+        const { error: studioErr } = await db.from("studios").update({
+          name,
+          email,
           description: f.studioDesc ?? null,
           timezone: f.timezone ?? undefined,
           currency: f.currency ?? undefined,
         }).eq("id", studioId);
+        if (studioErr) return json({ error: studioErr.message }, 500);
         break;
+      }
 
-      case "branding":
-        await db.from("studios").update({
+      case "branding": {
+        const { error: brandErr } = await db.from("studios").update({
           brand_primary_color: f.primaryColor ?? undefined,
           brand_secondary_color: f.secondaryColor ?? undefined,
         }).eq("id", studioId);
+        if (brandErr) return json({ error: brandErr.message }, 500);
         break;
+      }
 
       case "location": {
         const rooms = String(f.rooms ?? "").split(",").map((r) => r.trim()).filter(Boolean);
@@ -416,69 +442,76 @@ serve(async (req) => {
           .maybeSingle();
         const row = {
           studio_id: studioId,
-          name: "Main Location",
+          name: String(f.locationName ?? "").trim() || "Main Location",
           address_line1: f.address ?? null,
           rooms,
           amenities,
           is_primary: true,
         };
-        if (existing) await db.from("locations").update(row).eq("id", existing.id);
-        else await db.from("locations").insert(row);
+        const { error: locationErr } = existing
+          ? await db.from("locations").update(row).eq("id", existing.id)
+          : await db.from("locations").insert(row);
+        if (locationErr) return json({ error: locationErr.message }, 500);
         break;
       }
 
       case "offerings":
       case "pricing": {
-        // Upsert a starter offering keyed by slug; set price on the pricing step.
-        const style = String(f.classStyle ?? "Class");
-        const offeringName = String(f.className ?? "").trim()
-          || style.charAt(0).toUpperCase() + style.slice(1);
-        await db.from("offerings").upsert(
-          {
-            studio_id: studioId,
-            name: offeringName,
-            slug: slugify(style),
-            style,
-            level: f.classLevel ?? "all",
-            duration_minutes: intOf(f.classDuration, 60),
-            capacity: intOf(f.classCapacity, 20),
-            drop_in_price_cents: f.classPrice ? dollarsToCents(f.classPrice) : null,
-          },
-          { onConflict: "studio_id,slug" },
-        );
+        if (step === "offerings") {
+          // The class the owner described on this step, keyed by its category.
+          const offeringName = String(f.className ?? "").trim();
+          if (!offeringName) return json({ error: "Enter a class name (or skip this step)" }, 400);
+          const style = String(f.classStyle ?? "").trim() || offeringName;
+          const { error: offeringErr } = await db.from("offerings").upsert(
+            {
+              studio_id: studioId,
+              name: offeringName,
+              slug: slugify(style),
+              style,
+              level: f.classLevel ?? "all",
+              duration_minutes: intOf(f.classDuration, 60),
+              capacity: intOf(f.classCapacity, 20),
+              drop_in_price_cents: f.classPrice ? dollarsToCents(f.classPrice) : null,
+            },
+            { onConflict: "studio_id,slug" },
+          );
+          if (offeringErr) return json({ error: offeringErr.message }, 500);
+        }
 
         if (step === "pricing") {
-          const dropIn = dollarsToCents(f.classPrice);
           const packClasses = intOf(f.packClasses, 10);
           const unlimited = f.memberUnlimited === true || f.memberUnlimited === "true";
-          // Starter pricing — the owner refines these in Financials. Use the
-          // owner's numbers when given, else derive from the drop-in price.
-          // Re-saving the step updates the starter plan instead of duplicating it.
-          const pack = {
-            studio_id: studioId,
-            name: String(f.packName ?? "").trim() || `${packClasses}-Class Pack`,
-            class_count: packClasses,
-            price_cents: f.packPrice ? dollarsToCents(f.packPrice) : dropIn * packClasses,
-            validity_days: 90,
-          };
-          const { data: existingPack } = await db
-            .from("class_pack_types").select("id").eq("studio_id", studioId)
-            .order("created_at").limit(1).maybeSingle();
-          if (existingPack) await db.from("class_pack_types").update(pack).eq("id", existingPack.id);
-          else await db.from("class_pack_types").insert(pack);
+          // A plan is only created when the owner typed its price: nothing is
+          // derived from the drop-in price. Re-saving updates the starter plan.
+          if (f.packPrice) {
+            const pack = {
+              studio_id: studioId,
+              name: String(f.packName ?? "").trim() || `${packClasses}-Class Pack`,
+              class_count: packClasses,
+              price_cents: dollarsToCents(f.packPrice),
+              validity_days: 90,
+            };
+            const { data: existingPack } = await db
+              .from("class_pack_types").select("id").eq("studio_id", studioId)
+              .order("created_at").limit(1).maybeSingle();
+            if (existingPack) await db.from("class_pack_types").update(pack).eq("id", existingPack.id);
+            else await db.from("class_pack_types").insert(pack);
+          }
 
-          const membership = {
-            studio_id: studioId,
-            name: String(f.memberName ?? "").trim() || (unlimited ? "Unlimited" : "Membership"),
-            billing_cycle: String(f.memberCycle ?? "monthly"),
-            classes_per_cycle: unlimited ? null : packClasses,
-            price_cents: f.memberPrice ? dollarsToCents(f.memberPrice) : (unlimited ? dropIn * 12 : dropIn * packClasses),
-          };
-          const { data: existingMembership } = await db
-            .from("membership_types").select("id").eq("studio_id", studioId)
-            .order("created_at").limit(1).maybeSingle();
-          if (existingMembership) await db.from("membership_types").update(membership).eq("id", existingMembership.id);
-          else await db.from("membership_types").insert(membership);
+          if (f.memberPrice) {
+            const membership = {
+              studio_id: studioId,
+              name: String(f.memberName ?? "").trim() || (unlimited ? "Unlimited" : "Membership"),
+              billing_cycle: String(f.memberCycle ?? "monthly"),
+              classes_per_cycle: unlimited ? null : packClasses,
+              price_cents: dollarsToCents(f.memberPrice),
+            };
+            const { data: existingMembership } = await db
+              .from("membership_types").select("id").eq("studio_id", studioId)
+              .order("created_at").limit(1).maybeSingle();
+            if (existingMembership) await db.from("membership_types").update(membership).eq("id", existingMembership.id);
+            else await db.from("membership_types").insert(membership);
+          }
         }
         break;
       }
@@ -622,7 +655,8 @@ serve(async (req) => {
 
       case "launch": {
         if (typeof f.discoverable === "boolean") {
-          await db.from("studios").update({ discoverable: f.discoverable }).eq("id", studioId);
+          const { error: launchErr } = await db.from("studios").update({ discoverable: f.discoverable }).eq("id", studioId);
+          if (launchErr) return json({ error: launchErr.message }, 500);
         }
         break;
       }

@@ -103,7 +103,7 @@ const OfferingsManage = import.meta.env.VITE_LIVE_DATA_ONLY === "true" ? lazy(()
 const FinancialsManage = import.meta.env.VITE_LIVE_DATA_ONLY === "true" ? lazy(() => import("./pages/owner/OwnerPayments")) : lazy(() => import("./pages/manage/Financials"));
 const ReportsManage = import.meta.env.VITE_LIVE_DATA_ONLY === "true" ? NoPage : lazy(() => import("./pages/manage/Reports"));
 const ImportManage = lazy(() => import("./pages/manage/Import"));
-const SettingsManage = import.meta.env.VITE_LIVE_DATA_ONLY === "true" ? NoPage : lazy(() => import("./pages/manage/Settings"));
+const SettingsManage = import.meta.env.VITE_LIVE_DATA_ONLY === "true" ? lazy(() => import("./pages/owner/OwnerSettings")) : lazy(() => import("./pages/manage/Settings"));
 const OnboardingManage = lazy(() => import("./pages/manage/Onboarding"));
 const MemberDetailManage = import.meta.env.VITE_LIVE_DATA_ONLY === "true" ? lazy(() => import("./pages/owner/OwnerMemberDetail")) : lazy(() => import("./pages/manage/MemberDetail"));
 const PromoCodesManage = import.meta.env.VITE_LIVE_DATA_ONLY === "true" ? NoPage : lazy(() => import("./pages/manage/PromoCodes"));
@@ -245,7 +245,7 @@ const App = () => (
                   <Route path="/manage/financials" element={<ProtectedRoute permission="studio.manage_settings"><FinancialsManage /></ProtectedRoute>} />
                   <Route path="/manage/reports" element={<LiveOnly><ProtectedRoute permission="studio.manage_schedule"><ReportsManage /></ProtectedRoute></LiveOnly>} />
                   <Route path="/manage/import" element={<ProtectedRoute permission="studio.manage_settings"><ImportManage /></ProtectedRoute>} />
-                  <Route path="/manage/settings" element={<LiveOnly><ProtectedRoute permission="studio.manage_settings"><SettingsManage /></ProtectedRoute></LiveOnly>} />
+                  <Route path="/manage/settings" element={<ProtectedRoute permission="studio.manage_settings"><SettingsManage /></ProtectedRoute>} />
                   {/* No role gate: this is where a new owner *creates* their studio,
                        before they hold any studio role. StudioSetupRoute asks the
                        database who may use it (single-studio mode + owner allow-list);

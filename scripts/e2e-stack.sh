@@ -31,6 +31,9 @@ sync() {
   sed -i -E "s/^(port|shadow_port) = 543([0-9]{2})$/\1 = ${PORT_BASE}\2/" "$config"
   sed -i "s/^inspector_port = .*/inspector_port = ${PORT_BASE}83/" "$config"
   sed -i "s#^site_url = .*#site_url = \"$APP_URL\"#" "$config"
+  # As in production: a new account must confirm its email before it has a session.
+  sed -i 's/^enable_confirmations = false$/enable_confirmations = true/' "$config"
+  sed -i 's/^email_sent = .*/email_sent = 1000/' "$config"
   cat > "$STACK/supabase/functions/.env" <<ENV
 STRIPE_SECRET_KEY=sk_test_local_placeholder_never_sent_to_stripe
 STRIPE_WEBHOOK_SECRET=whsec_local_e2e_only
