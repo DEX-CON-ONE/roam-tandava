@@ -108,10 +108,10 @@ export default function StudioStorefront({ slug: slugProp }: { slug?: string } =
         )}
         <div className="mt-6 flex flex-wrap gap-3">
           <Button asChild size="lg" style={accent ? { backgroundColor: accent } : undefined}>
-            <Link to="/auth/register">Sign up to book<ArrowRight className="ms-2 h-4 w-4" /></Link>
+            <Link to={`/s/${studio.slug}/schedule`} data-testid="storefront-schedule">See the schedule<ArrowRight className="ms-2 h-4 w-4" /></Link>
           </Button>
           <Button asChild variant="outline" size="lg">
-            <Link to="/auth/login">Sign in</Link>
+            <Link to={`/s/${studio.slug}/plans`}>Passes and memberships</Link>
           </Button>
         </div>
       </section>
@@ -170,7 +170,7 @@ export default function StudioStorefront({ slug: slugProp }: { slug?: string } =
                       </p>
                     </div>
                     <Button asChild variant="outline" size="sm" className="shrink-0">
-                      <Link to="/auth/register">Book</Link>
+                      <Link to={`/s/${studio.slug}/class/${c.occurrence_id}`}>Book</Link>
                     </Button>
                   </CardContent>
                 </Card>
@@ -198,7 +198,7 @@ export default function StudioStorefront({ slug: slugProp }: { slug?: string } =
                     {m.classes_per_cycle == null ? "Unlimited classes" : `${m.classes_per_cycle} classes / cycle`}
                   </p>
                   <Button asChild size="sm" className="mt-3 w-full" style={accent ? { backgroundColor: accent } : undefined}>
-                    <Link to="/auth/register">Get started</Link>
+                    <Link to={`/s/${studio.slug}/plans`}>Get started</Link>
                   </Button>
                 </CardContent>
               </Card>
@@ -212,7 +212,7 @@ export default function StudioStorefront({ slug: slugProp }: { slug?: string } =
                     {p.class_count} classes · valid {p.validity_days} days
                   </p>
                   <Button asChild variant="outline" size="sm" className="mt-3 w-full">
-                    <Link to="/auth/register">Buy pack</Link>
+                    <Link to={`/s/${studio.slug}/plans`}>Buy pack</Link>
                   </Button>
                 </CardContent>
               </Card>

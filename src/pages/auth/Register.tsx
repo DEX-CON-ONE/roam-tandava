@@ -13,6 +13,7 @@ import { useTranslation } from "react-i18next";
 import { brand } from "@/config/brand";
 import { BrandMark } from "@/components/BrandMark";
 import { authProviders } from "@/config/auth-providers";
+import { defaultMemberHome, peekNext, rememberNextFromUrl, takeNext } from "@/lib/member/next";
 
 type RegistrationStep = "info" | "complete";
 
@@ -21,6 +22,8 @@ const Register = () => {
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const { t } = useTranslation('auth');
+  // Remember a ?next= destination (e.g. the class being booked) across sign-up.
+  const [bookingNext] = useState(() => rememberNextFromUrl(window.location.search) ?? peekNext());
   const { signUpWithEmail, signInWithGoogle, isDemoMode } = useAuth();
   const [step, setStep] = useState<RegistrationStep>("info");
   const [needsEmailConfirmation, setNeedsEmailConfirmation] = useState(false);
@@ -148,30 +151,38 @@ const Register = () => {
           {/* Quick actions - large touch targets for mobile */}
           <div className="space-y-3 pt-4">
             <Button
-              onClick={() => navigate("/schedule")}
+              onClick={() => navigate(takeNext() ?? defaultMemberHome() ?? "/")}
               className="w-full h-14 text-lg"
               size="lg"
             >
-              {t('register.browseClasses')}
+              {bookingNext ? "Continue to booking" : t('register.browseClasses')}
               <ArrowRight className="ms-2 h-5 w-5" />
             </Button>
 
-            <Button
-              variant="outline"
-              onClick={() => navigate("/account")}
-              className="w-full h-12"
-            >
-              {t('register.completeProfile')}
-            </Button>
+            {!bookingNext && (
 
-            <Button
-              variant="outline"
-              onClick={() => navigate("/manage/onboarding")}
-              className="w-full h-12"
-            >
-              <Store className="me-2 h-4 w-4" />
-              {t('register.setupStudio')}
-            </Button>
+              <>
+    
+                <Button
+                  variant="outline"
+                  onClick={() => navigate("/account")}
+                  className="w-full h-12"
+                >
+                  {t('register.completeProfile')}
+                </Button>
+    
+                <Button
+                  variant="outline"
+                  onClick={() => navigate("/manage/onboarding")}
+                  className="w-full h-12"
+                >
+                  <Store className="me-2 h-4 w-4" />
+                  {t('register.setupStudio')}
+                </Button>
+
+              </>
+
+            )}
 
             <Button
               variant="ghost"

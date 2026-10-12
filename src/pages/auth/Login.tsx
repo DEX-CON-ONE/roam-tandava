@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,12 +12,15 @@ import { useTranslation } from "react-i18next";
 import { brand } from "@/config/brand";
 import { BrandMark } from "@/components/BrandMark";
 import { authProviders } from "@/config/auth-providers";
+import { rememberNextFromUrl, takeNext } from "@/lib/member/next";
 
 const Login = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { signInWithEmail, signInWithGoogle } = useAuth();
   const { t } = useTranslation('auth');
+  // Remember a ?next= destination (e.g. the class being booked) across sign-in.
+  useEffect(() => { rememberNextFromUrl(window.location.search); }, []);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -51,7 +54,7 @@ const Login = () => {
       description: t('signInSuccess'),
     });
 
-    navigate("/");
+    navigate(takeNext() ?? "/");
     setIsLoading(false);
   };
 

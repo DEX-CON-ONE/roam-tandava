@@ -20,6 +20,11 @@ export const LIVE_DATA_ONLY = import.meta.env.VITE_LIVE_DATA_ONLY === "true";
 export const LIVE_ROUTE_PATHS: readonly string[] = [
   "/", // resolver only: redirects by session
   "/s/:slug", // public storefront: studio, schedule, plans from the database
+  "/s/:slug/schedule", // member journey: live schedule (get_studio_schedule)
+  "/s/:slug/class/:occurrenceId", // class detail + booking (book_class / stripe-checkout)
+  "/s/:slug/plans", // passes and memberships on sale (stripe-checkout)
+  "/s/:slug/my", // my bookings and passes (get_my_bookings / get_my_passes)
+  "/s/:slug/checkout/:outcome", // return from Stripe: polls the real state
   "/auth/login",
   "/auth/register",
   "/auth/reset",

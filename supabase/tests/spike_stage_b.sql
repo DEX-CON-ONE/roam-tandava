@@ -265,5 +265,33 @@ BEGIN
   END;
 END $$;
 
+-- book_class() (00030): a pass booking consumes exactly one class, and a member can
+-- book the same class again after cancelling.
+RESET ROLE;
+CREATE TEMP TABLE spike_rpc (occurrence UUID, pack UUID, before_remaining INT, booking UUID) ON COMMIT DROP;
+WITH created AS (
+  INSERT INTO class_occurrences (studio_id, offering_id, location_id, starts_at, ends_at, capacity)
+  SELECT o.studio_id, o.offering_id, o.location_id, o.starts_at + make_interval(days => 60), o.ends_at + make_interval(days => 60), 20
+  FROM class_occurrences o WHERE o.id = (SELECT occurrence_a FROM spike_ids)
+  RETURNING id
+), pack AS (
+  INSERT INTO class_packs (studio_id, profile_id, class_pack_type_id, status, classes_remaining, classes_total, expires_at)
+  SELECT cp.studio_id, cp.profile_id, cp.class_pack_type_id, 'active', 5, 5, NOW() + INTERVAL '30 days'
+  FROM class_packs cp WHERE cp.id = (SELECT pack_a FROM spike_ids)
+  RETURNING id, profile_id
+)
+INSERT INTO spike_rpc (occurrence, pack, before_remaining) SELECT (SELECT id FROM created), (SELECT id FROM pack), 5;
+SELECT spike_as((SELECT profile_id FROM class_packs WHERE id = (SELECT pack FROM spike_rpc)));
+UPDATE spike_rpc SET booking = (book_class((SELECT occurrence FROM spike_rpc), 'class_pack', (SELECT pack FROM spike_rpc))).id;
+SELECT spike_assert((SELECT classes_remaining FROM class_packs WHERE id = (SELECT pack FROM spike_rpc)) = 4, 'book_class did not consume exactly one class from the pack');
+SELECT cancel_booking((SELECT booking FROM spike_rpc));
+SELECT spike_assert((SELECT classes_remaining FROM class_packs WHERE id = (SELECT pack FROM spike_rpc)) = 5, 'on-time cancel did not return the class to the pack');
+SELECT book_class((SELECT occurrence FROM spike_rpc), 'class_pack', (SELECT pack FROM spike_rpc));
+SELECT spike_assert((SELECT COUNT(*) FROM bookings WHERE class_occurrence_id = (SELECT occurrence FROM spike_rpc) AND status = 'confirmed') = 1, 'could not book the same class again after cancelling');
+SELECT spike_assert((SELECT classes_remaining FROM class_packs WHERE id = (SELECT pack FROM spike_rpc)) = 4, 're-booking did not consume exactly one class');
+SELECT spike_assert(jsonb_array_length((get_booking_options((SELECT occurrence FROM spike_rpc)))->'sources') >= 1, 'get_booking_options returned no passes for the member');
+SELECT spike_assert((SELECT COUNT(*) FROM get_my_bookings('spike-a') WHERE occurrence_id = (SELECT occurrence FROM spike_rpc)) = 2, 'get_my_bookings did not return the member''s bookings');
+RESET ROLE;
+
 SELECT 'PASS: RLS isolation, booking, capacity, double-booking, cancellation window, waitlist promotion, and entitlement consistency' AS result;
 ROLLBACK;

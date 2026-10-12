@@ -293,6 +293,11 @@ const supabaseApi: ApiProvider = {
 // Combined backend export
 // ---------------------------------------------------------------------------
 
+/** The shared Supabase client, for feature modules that call RPCs the generic providers do not cover. */
+export function getSupabaseClient(): SupabaseClient<Database> {
+  return getClient();
+}
+
 export const supabaseBackend: Backend = {
   auth: supabaseAuth,
   data: supabaseData,

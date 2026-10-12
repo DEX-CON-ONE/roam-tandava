@@ -26,7 +26,7 @@ describe("live-data-only mode", () => {
 
   it("screens declared live do not carry page-level sample data", () => {
     // The files behind the live routes that render records.
-    for (const file of ["src/pages/StudioStorefront.tsx", "src/pages/manage/Import.tsx", "src/pages/auth/Login.tsx", "src/pages/auth/Register.tsx"]) {
+    for (const file of ["src/pages/StudioStorefront.tsx", "src/pages/member/StudioSchedule.tsx", "src/pages/member/ClassDetail.tsx", "src/pages/member/StudioPlans.tsx", "src/pages/member/MyBookings.tsx", "src/pages/member/CheckoutReturn.tsx", "src/pages/manage/Import.tsx", "src/pages/auth/Login.tsx", "src/pages/auth/Register.tsx"]) {
       expect(source(file), file).not.toMatch(/^const (mock|MOCK|sample|SAMPLE)[A-Za-z_]*\s*[:=]/m);
     }
   });
@@ -35,7 +35,7 @@ describe("live-data-only mode", () => {
     for (const name of ["Schedule", "Index", "ManageDashboard", "TeachersManage", "AuditLogsManage", "Kiosk"]) {
       expect(app, name).toMatch(new RegExp(`const ${name} = import\\.meta\\.env\\.VITE_LIVE_DATA_ONLY === "true" \\? NoPage : lazy\\(`));
     }
-    for (const name of ["StudioStorefront", "Login", "Register", "OnboardingManage", "ImportManage"]) {
+    for (const name of ["StudioStorefront", "MemberSchedule", "MemberClassDetail", "MemberPlans", "MemberBookings", "MemberCheckoutReturn", "Login", "Register", "OnboardingManage", "ImportManage"]) {
       expect(app, name).toMatch(new RegExp(`const ${name} = lazy\\(`));
     }
   });
