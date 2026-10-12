@@ -22,6 +22,10 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import Stripe from "https://esm.sh/stripe@14?target=deno";
 import { assertStripeKeyMode, stripeStatusToMembershipStatus } from "../stripe/config.ts";
 import { createStripeWebhookHandler as createRequestHandler, type StripeWebhookClient } from "./handler.ts";
+import { sendEmail } from "../email/provider.ts";
+import { sendCheckoutNotifications, type NotificationDatabase } from "./notifications.ts";
+
+declare const EdgeRuntime: { waitUntil?: (promise: Promise<unknown>) => void } | undefined;
 
 const stripe = new Stripe(assertStripeKeyMode(
   Deno.env.get("STRIPE_SECRET_KEY"),
@@ -48,6 +52,20 @@ export function createStripeWebhookHandler(
     stripe: stripeClient as StripeWebhookClient,
     webhookSecret: secret,
     supabase: database,
+    // Confirmation emails: once per event, after processing, never blocking Stripe's response.
+    onProcessed: (event, database) => {
+      const work = sendCheckoutNotifications({
+        event,
+        database: database as unknown as NotificationDatabase,
+        sendEmail,
+        appUrl: Deno.env.get("APP_URL") ?? "http://localhost:8080",
+      }).then((outcome) => console.log(`[stripe-webhook] notifications for ${event.id}: sent=${outcome.sent} skipped=${outcome.skipped.join("; ") || "none"}`));
+      if (typeof EdgeRuntime !== "undefined" && EdgeRuntime?.waitUntil) {
+        EdgeRuntime.waitUntil(work);
+        return Promise.resolve();
+      }
+      return work;
+    },
     onEvent: async (event, database) => {
       console.log(`[stripe-webhook] Received: ${event.type}`);
       switch (event.type) {

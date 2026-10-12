@@ -32,15 +32,18 @@ function databaseMock() {
         update(values: unknown) {
           calls.push({ table, operation: "update", values });
           return { eq: (_column: string, value: unknown) => {
-            const finish = async () => {
-              if (table === "stripe_webhook_events" && eventRows.has(String(value))) eventRows.set(String(value), { status: "processed" });
-              return { error: null };
+            // Mirrors `update ... where id = ? [and status = 'processing'] returning id`.
+            const complete = (onlyIfProcessing: boolean) => {
+              const row = table === "stripe_webhook_events" ? eventRows.get(String(value)) : undefined;
+              if (!row || (onlyIfProcessing && row.status !== "processing")) return [] as Array<{ id: string }>;
+              eventRows.set(String(value), { status: "processed" });
+              return [{ id: String(value) }];
             };
-            const chain = { eq: async (_secondColumn: string, secondValue: unknown) => {
-              if (table === "stripe_webhook_events" && eventRows.has(String(secondValue))) eventRows.set(String(secondValue), { status: "processed" });
-              return { error: null };
-            }, then: (resolve: (value: { error: null }) => unknown, reject?: (reason: unknown) => unknown) => finish().then(resolve, reject) };
-            return chain;
+            const done = Promise.resolve({ error: null });
+            return Object.assign(done, {
+              eq: (_secondColumn: string, _secondValue: unknown) =>
+                Object.assign(Promise.resolve({ error: null }), { select: async () => ({ data: complete(true), error: null }) }),
+            });
           } };
         },
         select() { return { eq: (_column: string, value: unknown) => ({ single: async () => ({ data: eventRows.get(String(value)) ? { id: String(value), ...eventRows.get(String(value)) } : null, error: null }) }) }; },
@@ -137,5 +140,75 @@ describe("Stripe webhook production handler", () => {
     await handler(signedRequest(classPack));
     await handler(signedRequest(classPack));
     expect(calls.filter((call) => call.table === "class_packs" && call.operation === "insert")).toHaveLength(1);
+  });
+});
+
+describe("Stripe webhook post-processing hook (confirmation emails)", () => {
+  const parse = { webhooks: { constructEventAsync: (body: string) => JSON.parse(body) as StripeEvent } } satisfies StripeWebhookClient;
+  const event = { id: "evt_notify_fixture", type: "checkout.session.completed", data: { object: { metadata: { type: "drop_in" } } } };
+
+  it("runs once for an event and not again on a replay", async () => {
+    const createHandler = await loadHandler();
+    const { database } = databaseMock();
+    const onProcessed = vi.fn(async () => {});
+    const handler = createHandler({ supabase: database, webhookSecret, stripe: parse, onEvent: vi.fn(async () => {}), onProcessed });
+    expect((await handler(signedRequest(event))).status).toBe(200);
+    expect(await (await handler(signedRequest(event))).json()).toMatchObject({ duplicate: true });
+    expect((await handler(signedRequest(event))).status).toBe(200);
+    expect(onProcessed).toHaveBeenCalledTimes(1);
+    expect(onProcessed).toHaveBeenCalledWith(expect.objectContaining({ id: "evt_notify_fixture" }), expect.anything());
+  });
+
+  it("runs once when two deliveries of the same event are processed concurrently", async () => {
+    const createHandler = await loadHandler();
+    const { database } = databaseMock();
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const onEvent = vi.fn(async () => { await gate; });
+    const onProcessed = vi.fn(async () => {});
+    const handler = createHandler({ supabase: database, webhookSecret, stripe: parse, onEvent, onProcessed });
+    const first = handler(signedRequest(event));
+    const second = handler(signedRequest(event));
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    release();
+    const responses = await Promise.all([first, second]);
+    expect(responses.map((response) => response.status)).toEqual([200, 200]);
+    expect(onEvent).toHaveBeenCalledTimes(2); // the ledger does not serialise concurrent duplicates...
+    expect(onProcessed).toHaveBeenCalledTimes(1); // ...but only one delivery wins processing -> processed
+  });
+
+  it("does not run when processing fails, then runs once after the successful retry", async () => {
+    const createHandler = await loadHandler();
+    const { database } = databaseMock();
+    let attempts = 0;
+    const onProcessed = vi.fn(async () => {});
+    const handler = createHandler({ supabase: database, webhookSecret, stripe: parse, onProcessed,
+      onEvent: async () => { attempts += 1; if (attempts === 1) throw new Error("transient fixture failure"); } });
+    expect((await handler(signedRequest(event))).status).toBe(500);
+    expect(onProcessed).not.toHaveBeenCalled();
+    expect((await handler(signedRequest(event))).status).toBe(200);
+    expect(onProcessed).toHaveBeenCalledTimes(1);
+  });
+
+  it("still acknowledges the event when the hook throws, and does not retry it", async () => {
+    const createHandler = await loadHandler();
+    const { database } = databaseMock();
+    const onProcessed = vi.fn(async () => { throw new Error("email provider down"); });
+    const handler = createHandler({ supabase: database, webhookSecret, stripe: parse, onEvent: vi.fn(async () => {}), onProcessed });
+    const response = await handler(signedRequest(event));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ received: true });
+    expect(await (await handler(signedRequest(event))).json()).toMatchObject({ duplicate: true });
+    expect(onProcessed).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not run for a rejected signature", async () => {
+    const createHandler = await loadHandler();
+    const { database } = databaseMock();
+    const onProcessed = vi.fn(async () => {});
+    const handler = createHandler({ supabase: database, webhookSecret, onEvent: vi.fn(), onProcessed,
+      stripe: { webhooks: { constructEventAsync: () => { throw new Error("bad signature"); } } } satisfies StripeWebhookClient });
+    expect((await handler(signedRequest(event))).status).toBe(400);
+    expect(onProcessed).not.toHaveBeenCalled();
   });
 });
