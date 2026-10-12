@@ -175,5 +175,38 @@ BEGIN
   END;
 END $$;
 
+-- Profile creation trigger (00022): names for password and OAuth sign-ups.
+RESET ROLE;
+INSERT INTO auth.users (id, email, raw_app_meta_data, raw_user_meta_data)
+VALUES
+  (gen_random_uuid(), 'password@signup.example.test', '{"provider":"email"}'::jsonb, '{"first_name":"Sam","last_name":"Lee","marketing_consent":true}'::jsonb),
+  (gen_random_uuid(), 'firstonly@signup.example.test', '{"provider":"email"}'::jsonb, '{"first_name":"Cher","last_name":"","full_name":"Ignored Name"}'::jsonb),
+  (gen_random_uuid(), 'given@signup.example.test', '{"provider":"google"}'::jsonb, '{"given_name":"Priya","family_name":"Shah","full_name":"Priya K Shah","name":"Priya K Shah"}'::jsonb),
+  (gen_random_uuid(), 'fullname@signup.example.test', '{"provider":"google"}'::jsonb, '{"full_name":"  Mary  Jane   van der Berg ","name":"Other"}'::jsonb),
+  (gen_random_uuid(), 'nameonly@signup.example.test', '{"provider":"google"}'::jsonb, '{"name":"Madonna"}'::jsonb),
+  (gen_random_uuid(), 'nometa@signup.example.test', '{"provider":"google"}'::jsonb, '{}'::jsonb),
+  (gen_random_uuid(), 'nullmeta@signup.example.test', '{"provider":"google"}'::jsonb, NULL);
+
+SELECT spike_assert((SELECT COUNT(*) FROM profiles WHERE email LIKE '%@signup.example.test') = 7, 'a profile row was not created for every new auth user');
+SELECT spike_assert((SELECT (first_name, last_name) = ('Sam', 'Lee') FROM profiles WHERE email = 'password@signup.example.test'), 'password sign-up names changed');
+SELECT spike_assert((SELECT (first_name, last_name) = ('Cher', '') FROM profiles WHERE email = 'firstonly@signup.example.test'), 'explicit first_name must win over full_name');
+SELECT spike_assert((SELECT (first_name, last_name) = ('Priya', 'Shah') FROM profiles WHERE email = 'given@signup.example.test'), 'given_name/family_name not used for OAuth sign-up');
+SELECT spike_assert((SELECT (first_name, last_name) = ('Mary', 'Jane van der Berg') FROM profiles WHERE email = 'fullname@signup.example.test'), 'full_name not split into first/last');
+SELECT spike_assert((SELECT (first_name, last_name) = ('Madonna', '') FROM profiles WHERE email = 'nameonly@signup.example.test'), 'single-word name not handled');
+SELECT spike_assert((SELECT (first_name, last_name) = ('', '') FROM profiles WHERE email = 'nometa@signup.example.test'), 'empty metadata should give empty names');
+SELECT spike_assert((SELECT (first_name, last_name) = ('', '') FROM profiles WHERE email = 'nullmeta@signup.example.test'), 'null metadata should give empty names');
+
+-- A later change to the auth user (e.g. linking Google) must not overwrite a name the user set.
+UPDATE profiles SET first_name = 'Samantha' WHERE email = 'password@signup.example.test';
+UPDATE auth.users SET raw_user_meta_data = '{"full_name":"Someone Else","given_name":"Someone","family_name":"Else"}'::jsonb WHERE email = 'password@signup.example.test';
+SELECT spike_assert((SELECT (first_name, last_name) = ('Samantha', 'Lee') FROM profiles WHERE email = 'password@signup.example.test'), 'profile name was overwritten by an auth metadata update');
+
+-- The Auth service runs with search_path = auth; the trigger must still find public.profiles.
+SET LOCAL search_path = auth;
+INSERT INTO auth.users (id, email, raw_app_meta_data, raw_user_meta_data)
+VALUES (gen_random_uuid(), 'authpath@signup.example.test', '{"provider":"email"}'::jsonb, '{"first_name":"Path","last_name":"Check"}'::jsonb);
+SET LOCAL search_path = "$user", public, extensions;
+SELECT spike_assert((SELECT (first_name, last_name) = ('Path', 'Check') FROM profiles WHERE email = 'authpath@signup.example.test'), 'profile not created when the caller search_path is auth');
+
 SELECT 'PASS: RLS isolation, booking, capacity, double-booking, cancellation window, waitlist promotion, and entitlement consistency' AS result;
 ROLLBACK;

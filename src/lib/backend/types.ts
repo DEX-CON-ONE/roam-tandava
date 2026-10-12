@@ -56,6 +56,12 @@ export interface AuthProvider {
   /** Send a password reset email */
   resetPassword(email: string): Promise<{ error: AuthError | null }>;
 
+  /**
+   * Set a new password for the signed-in user. After following a reset link the
+   * user has a short-lived recovery session, which is what authorises this.
+   */
+  updatePassword(password: string): Promise<{ error: AuthError | null }>;
+
   /** Get the currently authenticated user (from persisted session) */
   getSession(): Promise<{ user: AuthUser | null }>;
 
