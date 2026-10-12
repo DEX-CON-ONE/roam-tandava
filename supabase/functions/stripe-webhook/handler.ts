@@ -6,7 +6,7 @@ export type StripeEvent = {
 
 export type StripeWebhookClient = {
   webhooks: {
-    constructEvent: (payload: string, signature: string, secret: string) => StripeEvent;
+    constructEventAsync: (payload: string, signature: string, secret: string) => Promise<StripeEvent> | StripeEvent;
   };
 };
 
@@ -41,7 +41,7 @@ export function createStripeWebhookHandler({
 
     let event: StripeEvent;
     try {
-      event = stripe.webhooks.constructEvent(await req.text(), signature, webhookSecret);
+      event = await stripe.webhooks.constructEventAsync(await req.text(), signature, webhookSecret);
     } catch (error) {
       console.error("Webhook signature verification failed:", error);
       return new Response("Invalid signature", { status: 400 });
