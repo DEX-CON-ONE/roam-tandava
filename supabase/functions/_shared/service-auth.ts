@@ -2,13 +2,28 @@
  * Service-role-only guard for server-to-server Edge Functions (email / sms / push).
  *
  * These functions send to arbitrary recipients, so they must never be callable
- * with the public anon key or an end user's session: the Supabase gateway's
- * `verify_jwt` accepts both. Only a request whose bearer token is exactly the
- * project's service role key is let through. Fails closed when the key is not
- * configured.
+ * with the public anon / publishable key or an end user's session: the Supabase
+ * gateway's `verify_jwt` accepts both. A request is let through only when it
+ * carries a service credential, in either form Supabase issues:
+ *
+ *   1. a secret API key: the `Authorization` bearer or `apikey` header exactly
+ *      equals SUPABASE_SERVICE_ROLE_KEY or one of SUPABASE_SECRET_KEYS; or
+ *   2. a legacy service-role JWT: a bearer JWT whose `role` claim is
+ *      `service_role`. Its signature is verified by the gateway, so these
+ *      functions MUST stay deployed with `verify_jwt = true` (pinned in
+ *      supabase/config.toml). Never deploy them with --no-verify-jwt.
+ *
+ * Fails closed when nothing matches.
  */
 
 type Handler = (req: Request) => Response | Promise<Response>;
+
+export interface ServiceCredentials {
+  /** SUPABASE_SERVICE_ROLE_KEY */
+  serviceRoleKey?: string;
+  /** SUPABASE_SECRET_KEYS (JSON of named secret keys, or a single key) */
+  secretKeys?: string;
+}
 
 const defaultCorsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -29,20 +44,57 @@ export function bearerToken(req: Request): string | null {
   return match ? match[1].trim() : null;
 }
 
-export function isServiceRoleRequest(req: Request, serviceRoleKey: string | undefined): boolean {
+function configuredKeys(credentials: ServiceCredentials): string[] {
+  const keys: string[] = [];
+  if (credentials.serviceRoleKey) keys.push(credentials.serviceRoleKey);
+  const collect = (value: unknown) => {
+    if (typeof value === "string" && value) keys.push(value);
+    else if (Array.isArray(value)) value.forEach(collect);
+    else if (value && typeof value === "object") Object.values(value).forEach(collect);
+  };
+  if (credentials.secretKeys) {
+    try {
+      collect(JSON.parse(credentials.secretKeys));
+    } catch {
+      collect(credentials.secretKeys);
+    }
+  }
+  return keys;
+}
+
+/** Role claim of a JWT, without verifying it (the gateway verifies the signature). */
+export function jwtRole(token: string): string | null {
+  const parts = token.split(".");
+  if (parts.length !== 3 || parts.some((part) => !part)) return null;
+  try {
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const payload = JSON.parse(atob(base64 + "=".repeat((4 - (base64.length % 4)) % 4)));
+    return typeof payload?.role === "string" ? payload.role : null;
+  } catch {
+    return null;
+  }
+}
+
+export function isServiceRoleRequest(req: Request, credentials: ServiceCredentials): boolean {
   const token = bearerToken(req);
-  return Boolean(serviceRoleKey && token && timingSafeEqual(token, serviceRoleKey));
+  const apiKey = req.headers.get("apikey")?.trim() || null;
+  const keys = configuredKeys(credentials);
+  for (const presented of [token, apiKey]) {
+    if (presented && keys.some((key) => timingSafeEqual(presented, key))) return true;
+  }
+  return Boolean(token && jwtRole(token) === "service_role");
 }
 
 /**
  * Wrap a handler so only service-role callers reach it.
  *   - OPTIONS (CORS preflight) passes through untouched
- *   - no bearer token            -> 401
- *   - any other token (anon key, signed-in user, wrong key) -> 403
+ *   - no bearer token and no apikey header -> 401
+ *   - anything that is not a service credential (anon / publishable key,
+ *     signed-in user, wrong key) -> 403
  */
 export function withServiceRoleOnly(
   handler: Handler,
-  getServiceRoleKey: () => string | undefined,
+  getCredentials: () => ServiceCredentials,
   corsHeaders: Record<string, string> = defaultCorsHeaders,
 ): Handler {
   const deny = (error: string, status: number) =>
@@ -53,8 +105,8 @@ export function withServiceRoleOnly(
 
   return (req) => {
     if (req.method === "OPTIONS") return handler(req);
-    if (!bearerToken(req)) return deny("Not authenticated", 401);
-    if (!isServiceRoleRequest(req, getServiceRoleKey())) {
+    if (!bearerToken(req) && !req.headers.get("apikey")) return deny("Not authenticated", 401);
+    if (!isServiceRoleRequest(req, getCredentials())) {
       return deny("This function is server-to-server only (service role required)", 403);
     }
     return handler(req);

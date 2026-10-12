@@ -413,3 +413,14 @@ enabled = true
 # formatted with uppercase keywords, indent 2, max width 180, trailing commas,
 # and column/key alignment. Set to "null" to emit raw, unformatted SQL.
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":180,\"commaStyle\":\"trailing\"}"
+
+# email / sms / push are service-role only (see supabase/functions/_shared/service-auth.ts).
+# The guard relies on the gateway verifying JWT signatures, so keep verify_jwt on.
+[functions.email]
+verify_jwt = true
+
+[functions.sms]
+verify_jwt = true
+
+[functions.push]
+verify_jwt = true
