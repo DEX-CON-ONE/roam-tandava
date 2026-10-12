@@ -16,6 +16,7 @@
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { withServiceRoleOnly } from "../_shared/service-auth.ts";
 import { sendSms } from "./provider.ts";
 import {
   classReminderSms,
@@ -47,7 +48,8 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-serve(async (req) => {
+// Server-to-server only: the anon key and user sessions are refused (see _shared/service-auth.ts).
+serve(withServiceRoleOnly(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
@@ -73,4 +75,4 @@ serve(async (req) => {
 
   const result = await sendSms({ to, body });
   return json(result, result.success ? 200 : 502);
-});
+}, () => Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"), corsHeaders));
