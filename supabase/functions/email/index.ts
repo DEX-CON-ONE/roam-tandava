@@ -112,4 +112,7 @@ serve(withServiceRoleOnly(async (req) => {
   });
 
   return json(result, result.success ? 200 : 502);
-}, () => Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"), corsHeaders));
+}, () => ({
+  serviceRoleKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"),
+  secretKeys: Deno.env.get("SUPABASE_SECRET_KEYS"),
+}), corsHeaders));
