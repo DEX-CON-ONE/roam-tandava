@@ -26,7 +26,7 @@ describe("live-data-only mode", () => {
 
   it("screens declared live do not carry page-level sample data", () => {
     // The files behind the live routes that render records.
-    const ownerScreens = ["OwnerDashboard", "OwnerClasses", "OwnerSession", "OwnerMembers", "OwnerMemberDetail", "OwnerPrices", "OwnerPayments", "OwnerSettings"].map((name) => `src/pages/owner/${name}.tsx`);
+    const ownerScreens = ["OwnerDashboard", "OwnerClasses", "OwnerSession", "OwnerMembers", "OwnerMemberDetail", "OwnerPrices", "OwnerPayments", "OwnerSettings", "OwnerHelp"].map((name) => `src/pages/owner/${name}.tsx`);
     for (const file of ["src/pages/StudioStorefront.tsx", "src/pages/member/StudioSchedule.tsx", "src/pages/member/ClassDetail.tsx", "src/pages/member/StudioPlans.tsx", "src/pages/member/MyBookings.tsx", "src/pages/member/CheckoutReturn.tsx", "src/pages/manage/Import.tsx", "src/pages/auth/Login.tsx", "src/pages/auth/Register.tsx", ...ownerScreens]) {
       expect(source(file), file).not.toMatch(/^const (mock|MOCK|sample|SAMPLE)[A-Za-z_]*\s*[:=]/m);
     }

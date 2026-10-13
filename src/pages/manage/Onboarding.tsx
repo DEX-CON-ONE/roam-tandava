@@ -386,10 +386,10 @@ export default function Onboarding() {
       return;
     }
     setStripeBusy(true);
-    const { data, error } = await api.invoke<{ url?: string }>("stripe-connect", { action: "start" });
+    const { data, error } = await api.invoke<{ url?: string; message?: string }>("stripe-connect", { action: "start" });
     setStripeBusy(false);
     if (error || !data?.url) {
-      toast({ title: "Couldn't start Stripe onboarding", description: error?.message ?? "No URL returned", variant: "destructive" });
+      toast({ title: "Couldn't start Stripe onboarding", description: data?.message ?? error?.message ?? "No URL returned", variant: "destructive" });
       return;
     }
     window.location.href = data.url;

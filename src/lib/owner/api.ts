@@ -535,3 +535,136 @@ export async function getMemberDetail(studioId: string, profileId: string): Prom
     payments: must<Payment[]>(payments),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Team and invitations (migration 00033)
+// ---------------------------------------------------------------------------
+
+export type TeamRole = "owner" | "admin" | "teacher";
+
+export const TEAM_ROLES: { value: TeamRole; label: string; summary: string }[] = [
+  { value: "owner", label: "Owner", summary: "Everything: classes, prices, members, payments, settings and the team." },
+  { value: "admin", label: "Manager", summary: "Day to day: classes, schedule, prices, members and attendance. No payments, settings or team." },
+  { value: "teacher", label: "Coach", summary: "Can be assigned to classes. No access to the management screens." },
+];
+
+export const teamRoleLabel = (role: string): string =>
+  TEAM_ROLES.find((item) => item.value === role)?.label ?? (role === "front_desk" ? "Front desk" : role);
+
+export interface TeamMember {
+  profile_id: string;
+  name: string | null;
+  email: string;
+  role: string;
+  is_primary: boolean;
+  is_me: boolean;
+  since: string;
+}
+
+export interface TeamInvite {
+  id: string;
+  email: string;
+  role: string;
+  created_at: string;
+  expires_at: string;
+  expired: boolean;
+  emailed_at: string | null;
+  email_error: string | null;
+}
+
+export interface Team {
+  i_am_primary: boolean;
+  members: TeamMember[];
+  invites: TeamInvite[];
+}
+
+export interface InviteResult {
+  ok: boolean;
+  emailed?: boolean;
+  registerUrl?: string;
+  error?: string;
+}
+
+export async function listTeam(studioId: string): Promise<Team> {
+  return must<Team>(await db().rpc("manage_list_team", { p_studio_id: studioId }));
+}
+
+async function teamInvite(body: Record<string, unknown>): Promise<InviteResult> {
+  const { data, error } = await db().functions.invoke<InviteResult>("team-invite", { body });
+  if (error) throw new Error("The invitation could not be sent. Try again in a moment.");
+  if (!data?.ok) throw new Error(data?.error ?? "The invitation could not be created.");
+  return data;
+}
+
+/** Creates the invitation (the database checks the caller is an owner) and emails it. */
+export function inviteToTeam(studioId: string, email: string, role: TeamRole): Promise<InviteResult> {
+  return teamInvite({ action: "invite", studioId, email, role });
+}
+
+export function resendInvite(inviteId: string): Promise<InviteResult> {
+  return teamInvite({ action: "resend", inviteId });
+}
+
+export async function revokeInvite(inviteId: string): Promise<void> {
+  must(await db().rpc("manage_revoke_invite", { p_invite_id: inviteId }));
+}
+
+export async function setTeamRole(studioId: string, profileId: string, role: TeamRole): Promise<void> {
+  must(await db().rpc("manage_set_staff_role", { p_studio_id: studioId, p_profile_id: profileId, p_role: role }));
+}
+
+export async function removeFromTeam(studioId: string, profileId: string): Promise<void> {
+  must(await db().rpc("manage_remove_staff", { p_studio_id: studioId, p_profile_id: profileId }));
+}
+
+export async function transferPrimaryOwner(studioId: string, profileId: string): Promise<void> {
+  must(await db().rpc("manage_transfer_primary_owner", { p_studio_id: studioId, p_profile_id: profileId }));
+}
+
+// ---------------------------------------------------------------------------
+// First-run checklist
+// ---------------------------------------------------------------------------
+
+export interface SetupChecklist {
+  details_confirmed: boolean;
+  has_class_times: boolean;
+  has_prices: boolean;
+  stripe_connected: boolean;
+  public_booking: boolean;
+  has_booking: boolean;
+}
+
+export async function getSetupChecklist(studioId: string): Promise<SetupChecklist> {
+  return must<SetupChecklist>(await db().rpc("manage_setup_checklist", { p_studio_id: studioId }));
+}
+
+export async function confirmStudioDetails(studioId: string): Promise<void> {
+  must(await db().rpc("manage_confirm_studio_details", { p_studio_id: studioId }));
+}
+
+// ---------------------------------------------------------------------------
+// Stripe account for payouts (stripe-connect function, owner only)
+// ---------------------------------------------------------------------------
+
+export interface PaymentsStatus {
+  ok: boolean;
+  mode: "missing" | "test" | "live";
+  accountLinked: boolean;
+  connected: boolean;
+  chargesEnabled: boolean;
+  detailsSubmitted: boolean;
+  /** Why something could not be done, e.g. "connect_not_enabled". */
+  problem?: string;
+  message?: string;
+  url?: string;
+}
+
+async function stripeConnect(action: "status" | "start" | "disconnect"): Promise<PaymentsStatus> {
+  const { data, error } = await db().functions.invoke<PaymentsStatus>("stripe-connect", { body: { action } });
+  if (error || !data) throw new Error("Could not reach the payments service. Try again in a moment.");
+  return data;
+}
+
+export const getPaymentsStatus = () => stripeConnect("status");
+export const startStripeOnboarding = () => stripeConnect("start");
+export const disconnectStripe = () => stripeConnect("disconnect");

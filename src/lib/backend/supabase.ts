@@ -150,6 +150,11 @@ const supabaseData: DataProvider = {
     // studio role server-side so permission gating works in production. The
     // RPC always describes the *session* user, so only stamp it onto their
     // own profile — never onto another user's row.
+    // An invitation to a studio's team is claimed here, before the role is
+    // read: the database grants it only for the caller's own confirmed email.
+    // Older deployments without the function simply skip this.
+    await client.rpc("claim_studio_invites" as never).then(() => undefined, () => undefined);
+
     const [profileRes, sessionRes, roleRes] = await Promise.all([
       client.from("profiles").select("*").eq("id", userId).single(),
       client.auth.getSession(),

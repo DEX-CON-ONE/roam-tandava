@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, CreditCard, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -13,49 +13,11 @@ import {
   listClassTypes, listMembershipTypes, listPackTypes, saveMembershipType, savePackType, setMembershipTypeActive, setPackTypeActive, updateClassType,
   type ClassType, type MembershipType, type OwnerStudio, type PackType,
 } from "@/lib/owner/api";
-import { centsToInput, formatMoney, parseMoneyToCents, stripeModeFromKey } from "@/lib/owner/format";
+import { centsToInput, formatMoney, parseMoneyToCents } from "@/lib/owner/format";
+import { PaymentsCard } from "@/components/owner/PaymentsCard";
 
 const CYCLES: [string, string][] = [["weekly", "week"], ["monthly", "month"], ["quarterly", "3 months"], ["annual", "year"]];
 const cycleLabel = (cycle: string) => CYCLES.find(([value]) => value === cycle)?.[1] ?? cycle;
-
-function StripeStatus({ studio }: { studio: OwnerStudio }) {
-  const mode = stripeModeFromKey(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
-  if (mode === "not_connected") {
-    return (
-      <Card className="border-amber-500/40 bg-amber-500/5" data-testid="stripe-status" data-stripe-mode={mode}>
-        <CardContent className="flex gap-3 p-4">
-          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
-          <div className="text-sm">
-            <p className="font-medium">Stripe is not connected yet</p>
-            <p className="text-muted-foreground">
-              You can set prices now, but nobody can pay online until this site is connected to a Stripe account. Members can still be booked in by you.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-  return (
-    <Card data-testid="stripe-status" data-stripe-mode={mode}>
-      <CardContent className="flex gap-3 p-4">
-        <CreditCard className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
-        <div className="text-sm">
-          <p className="flex flex-wrap items-center gap-2 font-medium">
-            Card payments go through Stripe
-            {mode === "test" ? <StatusPill tone="warn">Test mode</StatusPill> : <StatusPill tone="good">Live</StatusPill>}
-          </p>
-          <p className="text-muted-foreground">
-            {mode === "test"
-              ? "Test mode: only Stripe test cards work and no real money moves. "
-              : ""}
-            Checkout charges the prices on this page in {studio.currency}; there is nothing to set up in Stripe for each price. A change here applies to the next purchase.
-            {studio.stripe_account_id && !studio.stripe_onboarding_complete ? " Your connected Stripe account has not finished its set-up yet." : ""}
-          </p>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
 
 function DropInRow({ type, currency }: { type: ClassType; currency: string }) {
   const run = useOwnerAction();
@@ -222,7 +184,7 @@ function PricesBody({ studio }: { studio: OwnerStudio }) {
 
   return (
     <div className="space-y-8">
-      <StripeStatus studio={studio} />
+      <PaymentsCard studio={studio} />
 
       <Section title="Drop-in prices">
         {activeTypes.length === 0 ? (

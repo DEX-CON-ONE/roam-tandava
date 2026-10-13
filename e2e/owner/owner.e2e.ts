@@ -24,6 +24,9 @@ const run = Date.now().toString(36);
 const OWNER = { email: `owner-${run}@e2e.example.test`, first: "Olive", last: "Owner" };
 const INTRUDER = { email: `intruder-${run}@e2e.example.test`, first: "Ivan", last: "Intruder" };
 const LATE = { email: `late-${run}@e2e.example.test`, first: "Lara", last: "Latecomer" };
+const MANAGER = { email: `manager-${run}@e2e.example.test`, first: "Mona", last: "Manager" };
+const COOWNER = { email: `second-${run}@e2e.example.test`, first: "Cora", last: "Coowner" };
+const COACH = { email: `coach-${run}@e2e.example.test`, first: "Colin", last: "Coach" };
 const MEMBER = { email: `member-${run}@e2e.example.test`, first: "Mia", last: "Member" };
 // What the ROAM build of the wizard proposes, and what the owner accepts.
 const STUDIO = { name: "ROAM Athletics", slug: "roam", timezone: "Europe/London", primary: "#b66d3b", secondary: "#313b32" };
@@ -91,7 +94,7 @@ test.afterAll(async () => {
 });
 
 test("a visitor who is not signed in is sent to sign-in from every owner screen", async ({ page }) => {
-  for (const path of ["/manage", "/manage/schedule", "/manage/offerings", "/manage/students", "/manage/financials", "/manage/settings", "/manage/onboarding"]) {
+  for (const path of ["/manage", "/manage/schedule", "/manage/offerings", "/manage/students", "/manage/financials", "/manage/settings", "/manage/help", "/manage/onboarding"]) {
     await page.goto(path);
     await expect(page).toHaveURL(/\/auth\/login$/);
   }
@@ -219,6 +222,12 @@ test("a new studio's dashboard shows real zeroes and empty states", async () => 
   await expect(owner.getByText("No sessions today")).toBeVisible();
   await expect(owner.getByText("Nothing scheduled after today")).toBeVisible();
   await expect(owner.getByRole("switch", { name: "Public booking page" })).toBeChecked();
+  // First-run checklist: only "public booking page" is true so far (switched on at launch).
+  await expect(owner.getByTestId("setup-progress")).toHaveText("1 of 6 done");
+  await expect(owner.getByTestId("setup-public_booking")).toHaveAttribute("data-done", "true");
+  for (const todo of ["details_confirmed", "has_class_times", "has_prices", "stripe_connected", "has_booking"]) {
+    await expect(owner.getByTestId(`setup-${todo}`)).toHaveAttribute("data-done", "false");
+  }
   // The account that registered before the studio existed is its first member.
   await expect(owner.getByTestId("stat-members")).toHaveText("1");
 
@@ -303,8 +312,17 @@ test("the owner creates a class type, a weekly schedule and a one-off session, t
 
 test("the owner sets a drop-in price, a class pack and a membership, and sees Stripe's status", async () => {
   await nav(owner, "Prices").click();
-  await expect(owner.getByTestId("stripe-status")).toHaveAttribute("data-stripe-mode", "test");
-  await expect(owner.getByTestId("stripe-status")).toContainText("Test mode");
+  // Asked of the server: a test key, and no Stripe account of the studio's own linked yet.
+  const payments = owner.getByTestId("stripe-status");
+  await expect(payments).toHaveAttribute("data-stripe-mode", "test");
+  await expect(payments).toHaveAttribute("data-stripe-state", "site_account");
+  await expect(payments).toContainText("Test mode");
+  await expect(payments).toContainText("Your Stripe account is not connected yet");
+  // This stack's Stripe key is a placeholder, so Stripe refuses: the owner is told, and nothing is stored.
+  await payments.getByRole("button", { name: "Connect your Stripe account" }).click();
+  await expect(owner.getByTestId("stripe-problem")).toHaveText("Stripe rejected this site's key.");
+  await expect(payments).toHaveAttribute("data-stripe-state", "site_account");
+  expect(sql("SELECT COALESCE(stripe_account_id, 'none') || '|' || stripe_onboarding_complete FROM studios")).toBe("none|false");
 
   const dropIn = owner.getByTestId("dropin-row").filter({ hasText: "Strength" });
   await expect(dropIn).toContainText("£15 per session");
@@ -346,6 +364,10 @@ test("the owner corrects the studio's details in Settings", async () => {
   await expect(owner.locator("#settings-timezone")).toHaveValue(STUDIO.timezone);
   await expect(owner.locator("#settings-window")).toHaveValue("2");
   await expect(owner.locator("#settings-listed")).toBeChecked();
+  // Nothing has been confirmed yet: the button says so, and confirming ticks the dashboard's first step.
+  await owner.getByRole("button", { name: "Confirm these details" }).click();
+  await expect(owner.getByText("Details confirmed").first()).toBeVisible();
+  expect(sql("SELECT (details_confirmed_at IS NOT NULL)::text FROM studios")).toBe("true");
   const save = owner.getByRole("button", { name: "Save settings" });
   await expect(save).toBeDisabled();
 
@@ -396,6 +418,153 @@ test("the owner corrects the studio's details in Settings", async () => {
     expect((await api.client.rpc("manage_update_studio", { ...base, ...bad })).error, JSON.stringify(bad)).not.toBeNull();
   }
   expect(sql(row)).toBe(`${STUDIO.name}|${STUDIO.slug}|hello@e2e.example.test|${STUDIO.timezone}|120|true|${STUDIO.primary}|${STUDIO.secondary}`);
+});
+
+test("the owner invites a manager and a second owner by email; invitations are enforced, expire and can be cancelled", async ({ browser }) => {
+  const studioId = sql("SELECT id FROM studios");
+  await nav(owner, "Settings").click();
+  const members = owner.getByTestId("team-member");
+  const invites = owner.getByTestId("team-invite");
+  await expect(members).toHaveCount(1);
+  await expect(members).toContainText("Primary owner");
+  await expect(members).toContainText("You");
+
+  const invite = async (email: string, role: string) => {
+    await owner.locator("#team-email").fill(email);
+    await owner.locator("#team-role").selectOption(role);
+    await owner.getByRole("button", { name: "Send invitation" }).click();
+    await expect(owner.getByTestId("team-invite-result")).toContainText(email);
+    await expect(invites.filter({ hasText: email })).toHaveCount(1);
+  };
+
+  // ---- Manager ----
+  await invite(MANAGER.email, "admin");
+  await expect(owner.getByTestId("team-invite-result")).toContainText("Emailed to");
+  await expect(invites.filter({ hasText: MANAGER.email })).toContainText("Manager");
+  expect(sql(`SELECT role || '|' || (emailed_at IS NOT NULL) || '|' || COALESCE(email_error, 'sent') || '|' || (expires_at > NOW() + INTERVAL '6 days') FROM studio_invites WHERE email = '${MANAGER.email}'`)).toBe("admin|true|sent|true");
+
+  // An invitation is worth nothing to anyone else: someone signed in with another address gets no role from it.
+  const stranger = await signIn(INTRUDER.email);
+  expect((await stranger.client.rpc("claim_studio_invites")).data).toBe(0);
+  expect((await stranger.client.rpc("get_my_effective_role")).data).toBe("student");
+  expect((await stranger.client.from("studio_invites").select("id")).data ?? []).toHaveLength(0);
+  expect((await stranger.client.rpc("manage_invite_staff", { p_studio_id: studioId, p_email: INTRUDER.email, p_role: "owner" })).error).not.toBeNull();
+  expect((await callFunction(stranger, "team-invite", { action: "invite", studioId, email: INTRUDER.email, role: "owner" })).body.ok).toBe(false);
+  expect(sql("SELECT COUNT(*) FROM studio_invites")).toBe("1");
+
+  // The invited person registers with that address, confirms it, and lands in the studio as a manager.
+  const managerContext = await browser.newContext();
+  const manager = await managerContext.newPage();
+  watchConsole(manager, "manager");
+  await register(manager, MANAGER);
+  await expect(manager).toHaveURL(/\/manage$/);
+  await expect(manager.getByRole("heading", { name: "Dashboard" })).toBeVisible();
+  expect(sql(`SELECT ss.role FROM studio_staff ss JOIN profiles p ON p.id = ss.profile_id WHERE p.email = '${MANAGER.email}'`)).toBe("admin");
+  expect(sql(`SELECT (accepted_at IS NOT NULL)::text FROM studio_invites WHERE email = '${MANAGER.email}'`)).toBe("true");
+  // A manager's menu has no owner-only sections, and those screens send them back.
+  await expect(nav(manager, "Classes")).toBeVisible();
+  for (const hidden of ["Settings", "Payments", "Import members"]) await expect(nav(manager, hidden)).toHaveCount(0);
+  for (const path of ["/manage/settings", "/manage/financials", "/manage/import"]) {
+    await manager.goto(path);
+    await expect(manager).toHaveURL(/\/manage$/);
+  }
+  await nav(manager, "Prices").click();
+  await expect(manager.getByTestId("stripe-status")).toContainText("The studio owner manages the Stripe account");
+  await expect(manager.getByRole("button", { name: /Connect your Stripe account/ })).toHaveCount(0);
+  const managerApi = await signIn(MANAGER.email);
+  expect((await managerApi.client.rpc("manage_list_team", { p_studio_id: studioId })).error).not.toBeNull();
+  expect((await managerApi.client.rpc("manage_invite_staff", { p_studio_id: studioId, p_email: "friend@e2e.example.test", p_role: "owner" })).error).not.toBeNull();
+  expect((await managerApi.client.rpc("manage_set_staff_role", { p_studio_id: studioId, p_profile_id: managerApi.id, p_role: "owner" })).error).not.toBeNull();
+  expect((await managerApi.client.rpc("manage_transfer_primary_owner", { p_studio_id: studioId, p_profile_id: managerApi.id })).error).not.toBeNull();
+  expect((await callFunction(managerApi, "stripe-connect", { action: "disconnect" })).status).toBe(403);
+  await managerContext.close();
+
+  // ---- Second owner ----
+  await owner.reload();
+  await expect(invites).toHaveCount(0);
+  await expect(members).toHaveCount(2);
+  await invite(COOWNER.email, "owner");
+  const coContext = await browser.newContext();
+  const co = await coContext.newPage();
+  watchConsole(co, "second owner");
+  await register(co, COOWNER);
+  await expect(co).toHaveURL(/\/manage$/);
+  await nav(co, "Settings").click();
+  await expect(co.getByTestId("team-member")).toHaveCount(3);
+  // Single-studio mode still holds: an invited owner cannot create another studio.
+  const coApi = await signIn(COOWNER.email);
+  expect((await coApi.client.rpc("get_my_effective_role")).data).toBe("owner");
+  expect((await coApi.client.rpc("studio_setup_access")).data).toMatchObject({ single_studio_mode: true, can_create_studio: false });
+  expect(sqlFails(`INSERT INTO studios (name, slug) VALUES ('Second Studio', 'second-studio');`)).toBe(true);
+  // A second owner manages the team, but cannot touch the primary owner or take the primary role.
+  const ownerId = sql(`SELECT id FROM profiles WHERE email = '${OWNER.email}'`);
+  const primaryRow = co.getByTestId("team-member").filter({ hasText: OWNER.email });
+  await expect(primaryRow).toContainText("Primary owner");
+  await expect(primaryRow.getByRole("button")).toHaveCount(0);
+  expect((await coApi.client.rpc("manage_remove_staff", { p_studio_id: studioId, p_profile_id: ownerId })).error).not.toBeNull();
+  expect((await coApi.client.rpc("manage_set_staff_role", { p_studio_id: studioId, p_profile_id: ownerId, p_role: "teacher" })).error).not.toBeNull();
+  expect((await coApi.client.rpc("manage_transfer_primary_owner", { p_studio_id: studioId, p_profile_id: coApi.id })).error).not.toBeNull();
+
+  // ---- Expired and cancelled invitations grant nothing ----
+  await owner.reload();
+  await invite(COACH.email, "teacher");
+  sql(`UPDATE studio_invites SET expires_at = NOW() - INTERVAL '1 minute' WHERE email = '${COACH.email}'`);
+  await invite(LATE.email, "owner");
+  await invites.filter({ hasText: LATE.email }).getByRole("button", { name: "Cancel invitation" }).click();
+  await expect(invites.filter({ hasText: LATE.email })).toHaveCount(0);
+  await owner.reload();
+  await expect(invites.filter({ hasText: COACH.email })).toContainText("Expired");
+  const coach = await signUp(COACH.email, COACH.first, COACH.last);
+  expect((await coach.client.rpc("claim_studio_invites")).data).toBe(0);
+  expect((await coach.client.rpc("get_my_effective_role")).data).toBe("student");
+  // Sent again while still valid, the same person does get the role, by signing in.
+  await invites.filter({ hasText: COACH.email }).getByRole("button", { name: "Cancel invitation" }).click();
+  await invite(COACH.email, "teacher");
+  expect((await coach.client.rpc("claim_studio_invites")).data).toBe(1);
+  expect((await coach.client.rpc("get_my_effective_role")).data).toBe("teacher");
+
+  // ---- Primary owner: hand it over, and get it back ----
+  await owner.reload();
+  await expect(members).toHaveCount(4);
+  const coRow = members.filter({ hasText: COOWNER.email });
+  await coRow.getByRole("button", { name: "Make primary owner" }).click();
+  await owner.getByRole("dialog").getByRole("button", { name: "Make primary owner" }).click();
+  await expect(coRow).toContainText("Primary owner");
+  expect(sql("SELECT primary_owner_id FROM studios")).toBe(coApi.id);
+  // No longer primary, the first owner cannot remove the new one.
+  await expect(coRow.getByRole("button")).toHaveCount(0);
+  expect((await coApi.client.rpc("manage_transfer_primary_owner", { p_studio_id: studioId, p_profile_id: ownerId })).error).toBeNull();
+  await owner.reload();
+  await expect(members.filter({ hasText: OWNER.email })).toContainText("Primary owner");
+
+  // ---- Roles and removal ----
+  const coachRow = members.filter({ hasText: COACH.email });
+  await coachRow.getByRole("combobox").selectOption("admin");
+  await expect(coachRow).toContainText("Manager");
+  for (const email of [COACH.email, MANAGER.email, COOWNER.email]) {
+    await members.filter({ hasText: email }).getByRole("button", { name: "Remove" }).click();
+    await owner.getByRole("dialog").getByRole("button", { name: "Remove" }).click();
+    await expect(members.filter({ hasText: email })).toHaveCount(0);
+  }
+  await expect(members).toHaveCount(1);
+  expect(sql("SELECT COUNT(*) || '|' || (SELECT COUNT(*) FROM studios) FROM studio_staff")).toBe("1|1");
+  // Removed means removed: the former owner's open session is sent away from the owner screens.
+  await co.goto("/manage/settings");
+  await expect(co).not.toHaveURL(/\/manage/);
+  expect((await coApi.client.rpc("get_my_effective_role")).data).toBe("student");
+  expect((await coApi.client.rpc("manage_list_team", { p_studio_id: studioId })).error).not.toBeNull();
+  await coContext.close();
+});
+
+test("the owner guide covers each step and links to the right screens", async () => {
+  await nav(owner, "Help").click();
+  await expect(owner.getByRole("heading", { name: "Help", level: 1 })).toBeVisible();
+  await expect(owner.getByTestId("help-topic")).toHaveCount(7);
+  for (const heading of ["The short version", "Classes and the schedule", "Prices", "Taking card payments with Stripe", "Members, bookings and attendance", "Your public booking page", "Giving other people access"]) {
+    await expect(owner.getByRole("heading", { name: heading })).toBeVisible();
+  }
+  await owner.getByTestId("help-topic").first().getByRole("link", { name: "Classes" }).click();
+  await expect(owner).toHaveURL(/\/manage\/schedule$/);
 });
 
 test("an anonymous visitor sees the class, prices and schedule on the public booking page", async ({ browser }) => {
@@ -490,7 +659,11 @@ test("a member's purchase arrives through the Stripe webhook; the owner books th
 
   // Dashboard numbers follow
   await nav(owner, "Dashboard").click();
-  await expect(owner.getByTestId("stat-members")).toHaveText("2");
+  await expect(owner.getByTestId("stat-members")).toHaveText(sql("SELECT COUNT(*) FROM studio_members"));
+  // The checklist followed along: everything but the Stripe account, which this stack cannot connect.
+  await expect(owner.getByTestId("setup-progress")).toHaveText("5 of 6 done");
+  await expect(owner.getByTestId("setup-stripe_connected")).toHaveAttribute("data-done", "false");
+  await expect(owner.getByTestId("setup-has_booking")).toHaveAttribute("data-done", "true");
   await expect(owner.getByText(`${MEMBER.first} ${MEMBER.last}`)).toBeVisible();
   expect(Number(await owner.getByTestId("stat-upcoming").textContent())).toBeGreaterThanOrEqual(1);
 
@@ -584,6 +757,7 @@ test("the owner screens fit a phone", async ({ browser }) => {
     [`/manage/members/${memberId}`, "Member"],
     ["/manage/financials", "Payments"],
     ["/manage/settings", "Settings"],
+    ["/manage/help", "Help"],
   ];
   for (const [path, heading] of screens) {
     await page.goto(path);

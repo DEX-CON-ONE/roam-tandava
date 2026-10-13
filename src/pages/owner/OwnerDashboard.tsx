@@ -5,6 +5,7 @@ import { CalendarDays, ExternalLink, Ticket, UserPlus, Users } from "lucide-reac
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
+import { SetupChecklist } from "@/components/owner/SetupChecklist";
 import { EmptyState, ErrorNote, OwnerPage, Section, Spinner, ownerKeys, useOwnerAction } from "@/components/owner/OwnerPage";
 import { getDashboard, setStudioDiscoverable, topUpSchedules, type DashboardSession, type OwnerStudio } from "@/lib/owner/api";
 import { formatDate, formatDayTime, formatTime } from "@/lib/owner/format";
@@ -18,7 +19,7 @@ function Stat({ icon: Icon, label, value, testId }: { icon: typeof Users; label:
         </span>
         <div className="min-w-0">
           <p className="text-2xl font-bold leading-none" data-testid={testId}>{value}</p>
-          <p className="mt-1 truncate text-xs text-muted-foreground">{label}</p>
+          <p className="mt-1 text-xs leading-tight text-muted-foreground">{label}</p>
         </div>
       </CardContent>
     </Card>
@@ -68,6 +69,7 @@ function DashboardBody({ studio }: { studio: OwnerStudio }) {
 
   return (
     <div className="space-y-8">
+      <SetupChecklist studio={studio} />
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat icon={CalendarDays} label="Sessions today" value={data.today_sessions.length} testId="stat-sessions-today" />
         <Stat icon={Ticket} label="Bookings today" value={data.today_bookings} testId="stat-bookings-today" />
