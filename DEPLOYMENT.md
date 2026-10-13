@@ -274,6 +274,30 @@ With the mode on:
 
 Also check that email confirmation is on in Supabase Auth: with confirmation off, anyone could register an allow-listed address before its real owner does.
 
+## Giving Other People Access (team invitations)
+
+An owner invites people from **Settings → Team**: an email address and a role (owner, manager, coach). The `team-invite` function creates the invitation through `manage_invite_staff()` with the caller's own session, so only a studio owner can, and emails it through the same provider as every other studio email. There is no secret link. The invited person gets the role when they sign in with that address after confirming it (`claim_studio_invites()`); invitations last 7 days, can be cancelled, and are used once.
+
+Single-studio mode is unaffected: nobody can create a second studio. `owner_email_allowlist` decides who may *create* the studio; after that the owner role can also be granted by an invitation or by the primary owner. Each studio has one primary owner (`studios.primary_owner_id`); only they can remove another owner or pass the primary role on.
+
+## Whose Stripe Account Takes the Money
+
+`stripe-checkout` decides per purchase:
+
+| Studio state | What checkout does |
+|---|---|
+| No Stripe account connected (or its onboarding unfinished) | Charges the account whose key is in `STRIPE_SECRET_KEY`, directly. |
+| Account connected and able to take payments | A destination charge: created on the `STRIPE_SECRET_KEY` (platform) account, paid out to the studio's connected account, less `PLATFORM_FEE_BPS` (default 0). |
+
+So there are two ways for a studio to be paid into its own account:
+
+1. **Its own keys.** Put the studio's own secret key, webhook signing secret and publishable key in this deployment. No Connect involved. Simplest for a deployment that serves one studio.
+2. **Connect.** The account behind `STRIPE_SECRET_KEY` must have signed up for Stripe Connect; the owner then presses **Connect your Stripe account** on the Prices screen (`stripe-connect` creates a Standard connected account and sends them to Stripe's hosted onboarding). With destination charges the platform account is the merchant of record: it pays Stripe's fees and carries refunds and disputes.
+
+Set `STRIPE_REQUIRE_CONNECTED_ACCOUNT=true` to make checkout refuse (409, with an explanation) rather than charge the platform account when the studio has not connected one. Leave it unset while testing.
+
+Test and live are separate worlds in Stripe: keys, webhook endpoints and connected accounts created in test mode do not exist in live mode. Going live means new live keys (`STRIPE_SECRET_KEY`, `VITE_STRIPE_PUBLISHABLE_KEY`), a live webhook endpoint and its `STRIPE_WEBHOOK_SECRET`, `ALLOW_LIVE_STRIPE=true`, a rebuild, and (route 2) the owner connecting again. For route 2 also add `account.updated` to an endpoint that listens to connected accounts, so a studio's status follows Stripe without the owner opening the Prices screen.
+
 ## Owner End-to-End Test
 
 `e2e/owner/` drives the real owner screens in a browser against a local Supabase stack (database, Auth, API, Edge Functions): register, setup wizard, class type, weekly schedule, prices, public page, a webhook-recorded purchase, booking, attendance, payments, and the refusals for every other account.

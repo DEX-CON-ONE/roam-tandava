@@ -28,7 +28,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import Stripe from "https://esm.sh/stripe@14?target=deno";
-import { assertStripeKeyMode } from "../stripe/config.ts";
+import { assertStripeKeyMode, mustRefuseWithoutConnectedAccount } from "../stripe/config.ts";
 
 const stripe = new Stripe(assertStripeKeyMode(
   Deno.env.get("STRIPE_SECRET_KEY"),
@@ -42,6 +42,9 @@ const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 const appUrl = Deno.env.get("APP_URL") ?? "http://localhost:8080";
 const platformFeeBps = parseInt(Deno.env.get("PLATFORM_FEE_BPS") ?? "0", 10);
+// Set to "true" when payments must never land in this deployment's own Stripe
+// account: checkout is then refused until the studio has connected its account.
+const requireConnected = Deno.env.get("STRIPE_REQUIRE_CONNECTED_ACCOUNT") === "true";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -56,6 +59,9 @@ function json(body: unknown, status = 200): Response {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 }
+
+/** The studio has no connected account and this deployment requires one. */
+class CheckoutUnavailable extends Error {}
 
 // Map the studio's billing cycle to a Stripe recurring interval.
 function recurringFor(cycle: string): { interval: string; interval_count: number } {
@@ -124,6 +130,9 @@ serve(async (req) => {
         studio?.stripe_account_id && studio?.stripe_onboarding_complete
           ? (studio.stripe_account_id as string)
           : null;
+      if (mustRefuseWithoutConnectedAccount(requireConnected, connected)) {
+        throw new CheckoutUnavailable();
+      }
       return { currency, connected };
     };
 
@@ -435,6 +444,9 @@ serve(async (req) => {
 
     return json({ error: `Unknown checkout type: ${type}` }, 400);
   } catch (err) {
+    if (err instanceof CheckoutUnavailable) {
+      return json({ error: "Online payment is not available yet: this studio has not finished connecting its Stripe account." }, 409);
+    }
     console.error("[stripe-checkout] error:", err);
     return json({ error: (err as Error).message ?? "Checkout failed" }, 500);
   }

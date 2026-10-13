@@ -5,6 +5,7 @@
  *   - checkout.session.completed  — finalize bookings and memberships
  *   - customer.subscription.*     — sync subscription status
  *   - invoice.payment_failed      — mark membership as past_due
+ *   - account.updated (Connect)   — keep a studio's connected-account status in step
  *
  * Deploy: supabase functions deploy stripe-webhook
  * Set secrets:
@@ -20,7 +21,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import Stripe from "https://esm.sh/stripe@14?target=deno";
-import { assertStripeKeyMode, stripeStatusToMembershipStatus } from "../stripe/config.ts";
+import { assertStripeKeyMode, connectStatusFromAccount, stripeStatusToMembershipStatus } from "../stripe/config.ts";
 import { createStripeWebhookHandler as createRequestHandler, type StripeWebhookClient } from "./handler.ts";
 import { sendEmail } from "../email/provider.ts";
 import { sendCheckoutNotifications, type NotificationDatabase } from "./notifications.ts";
@@ -87,6 +88,13 @@ export function createStripeWebhookHandler(
 
       case "invoice.payment_succeeded":
         await handlePaymentSucceeded(event.data.object as Stripe.Invoice, database);
+        break;
+
+      // Connect: a studio's own Stripe account changed (onboarding finished,
+      // payments paused or restored). Only arrives on an endpoint that listens
+      // to connected accounts.
+      case "account.updated":
+        await handleAccountUpdated(event.data.object as Stripe.Account, database);
         break;
       default:
         console.log(`[stripe-webhook] Unhandled event type: ${event.type}`);
@@ -337,4 +345,14 @@ async function handlePaymentSucceeded(invoice: Stripe.Invoice, database = supaba
     .eq("stripe_subscription_id", invoice.subscription as string)
     .eq("status", "past_due");
   if (error) console.error("Failed to restore membership after payment:", error);
+}
+
+async function handleAccountUpdated(account: Stripe.Account, database = supabase) {
+  if (!account.id) return;
+  const { connected } = connectStatusFromAccount(account);
+  const { error } = await database
+    .from("studios")
+    .update({ stripe_onboarding_complete: connected })
+    .eq("stripe_account_id", account.id);
+  if (error) console.error("Failed to sync connected account status:", error);
 }

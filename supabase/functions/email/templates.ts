@@ -316,3 +316,28 @@ export function studioSaleNotificationEmail(data: {
     text: `${title} at ${data.studioName}\n\n${data.itemName}\n${details.length ? details.join("\n") + "\n" : ""}From: ${from}\n\nOpen studio admin: ${data.manageUrl}`,
   };
 }
+
+/** Invitation to join a studio's team. The role is granted when they sign in with the invited address. */
+export function teamInviteEmail(data: {
+  studioName: string;
+  inviterName: string;
+  roleLabel: string;
+  roleSummary: string;
+  email: string;
+  expiresOn: string;
+  registerUrl: string;
+  signInUrl: string;
+}): TemplateResult {
+  return {
+    subject: `You have been invited to manage ${data.studioName}`,
+    html: layout(`
+      <h1 style="color:${TEXT_COLOR};font-size:24px;margin:0 0 16px;">Join the ${esc(data.studioName)} team</h1>
+      <p>${esc(data.inviterName)} has invited you to ${esc(data.studioName)}'s booking system as <strong>${esc(data.roleLabel)}</strong>. ${esc(data.roleSummary)}</p>
+      <p>Create your account with this email address, <strong>${esc(data.email)}</strong>, and you will be taken straight in.</p>
+      ${button("Create your account", data.registerUrl)}
+      <p>Already have an account with this address? <a href="${data.signInUrl}" style="color:${BRAND_COLOR};">Sign in</a> instead.</p>
+      <p style="color:${MUTED_COLOR};font-size:14px;">This invitation is for ${esc(data.email)} only and expires on ${esc(data.expiresOn)}. If you were not expecting it, you can ignore this email.</p>
+    `, data.studioName),
+    text: `${data.inviterName} has invited you to ${data.studioName}'s booking system as ${data.roleLabel}. ${data.roleSummary}\n\nCreate your account with this email address (${data.email}) and you will be taken straight in:\n${data.registerUrl}\n\nAlready have an account? Sign in: ${data.signInUrl}\n\nThis invitation is for ${data.email} only and expires on ${data.expiresOn}.`,
+  };
+}

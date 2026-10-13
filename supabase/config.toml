@@ -433,3 +433,7 @@ verify_jwt = false
 # Stripe signature itself. Without this, Stripe deliveries get 401.
 [functions.stripe-webhook]
 verify_jwt = false
+
+# Signed-in owners only; the function also asks the database whether the caller may invite.
+[functions.team-invite]
+verify_jwt = true

@@ -386,5 +386,86 @@ SELECT spike_assert((studio_setup_access_for((SELECT owner_a FROM spike_ids))->>
 INSERT INTO studio_staff (studio_id, profile_id, role) SELECT studio_b, owner_a, 'owner' FROM spike_ids;
 UPDATE deployment_settings SET single_studio_mode = FALSE, owner_email_allowlist = '{}';
 
-SELECT 'PASS: RLS isolation, booking, capacity, double-booking, cancellation window, waitlist promotion, entitlement consistency, owner admin RLS and single-studio mode' AS result;
+-- Team invitations (00033), as the `authenticated` role.
+RESET ROLE;
+SELECT spike_assert((SELECT primary_owner_id FROM studios WHERE id = (SELECT studio_a FROM spike_ids)) = (SELECT owner_a FROM spike_ids), 'the first owner is not the primary owner');
+UPDATE deployment_settings SET single_studio_mode = TRUE, owner_email_allowlist = ARRAY['owner-a@example.test'];
+
+-- A member cannot invite; the owner can.
+SELECT spike_as(member_a) FROM spike_ids;
+SET LOCAL ROLE authenticated;
+DO $$
+BEGIN
+  BEGIN
+    PERFORM manage_invite_staff((SELECT studio_a FROM spike_ids), 'member-a@example.test', 'owner');
+    RAISE EXCEPTION 'SPIKE FAIL: a member invited themselves as owner';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+END $$;
+SELECT spike_assert(claim_studio_invites() = 0, 'a member claimed an invitation that does not exist');
+RESET ROLE;
+SELECT spike_as(owner_a) FROM spike_ids;
+SET LOCAL ROLE authenticated;
+SELECT manage_invite_staff((SELECT studio_a FROM spike_ids), ' Member-A@Example.test ', 'owner');
+SELECT manage_invite_staff((SELECT studio_a FROM spike_ids), 'member-b@example.test', 'admin');
+SELECT manage_invite_staff((SELECT studio_a FROM spike_ids), 'member-other@example.test', 'admin');
+SELECT spike_assert((SELECT COUNT(*) FROM studio_invites) = 3, 'the owner cannot see the invitations they sent');
+SELECT manage_revoke_invite((SELECT id FROM studio_invites WHERE email = 'member-other@example.test'));
+RESET ROLE;
+UPDATE studio_invites SET expires_at = NOW() - INTERVAL '1 minute' WHERE email = 'member-b@example.test';
+
+-- Expired and revoked invitations grant nothing; invitations are invisible to the invited.
+SELECT spike_as(member_b) FROM spike_ids;
+SET LOCAL ROLE authenticated;
+SELECT spike_assert(claim_studio_invites() = 0, 'an expired invitation was claimed');
+SELECT spike_assert((SELECT COUNT(*) FROM studio_invites) = 0, 'a non-owner can read invitations');
+RESET ROLE;
+SELECT spike_as(member_b_other_studio) FROM spike_ids;
+SET LOCAL ROLE authenticated;
+SELECT spike_assert(claim_studio_invites() = 0, 'a revoked invitation was claimed');
+RESET ROLE;
+
+-- The invited address, confirmed, becomes an owner: even in single-studio mode, off the allow-list.
+SELECT spike_as(member_a) FROM spike_ids;
+SET LOCAL ROLE authenticated;
+SELECT spike_assert(claim_studio_invites() = 1, 'a valid owner invitation was not claimed');
+SELECT spike_assert(claim_studio_invites() = 0, 'an invitation was claimed twice');
+SELECT spike_assert(get_my_effective_role() = 'owner', 'the invited owner did not become an owner');
+-- A second owner cannot remove or replace the primary owner.
+DO $$
+BEGIN
+  BEGIN
+    PERFORM manage_remove_staff((SELECT studio_a FROM spike_ids), (SELECT owner_a FROM spike_ids));
+    RAISE EXCEPTION 'SPIKE FAIL: a second owner removed the primary owner';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM LIKE 'SPIKE FAIL%' THEN RAISE; END IF;
+  END;
+  BEGIN
+    PERFORM manage_transfer_primary_owner((SELECT studio_a FROM spike_ids), auth.uid());
+    RAISE EXCEPTION 'SPIKE FAIL: a second owner took the primary role';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+END $$;
+RESET ROLE;
+-- An unconfirmed address claims nothing.
+UPDATE auth.users SET email_confirmed_at = NULL WHERE email = 'member-b@example.test';
+UPDATE studio_invites SET expires_at = NOW() + INTERVAL '1 day' WHERE email = 'member-b@example.test';
+SELECT spike_as(member_b) FROM spike_ids;
+SET LOCAL ROLE authenticated;
+SELECT spike_assert(claim_studio_invites() = 0, 'an unconfirmed email address claimed an invitation');
+RESET ROLE;
+-- The primary owner hands the role over, and the new primary can then remove them.
+SELECT spike_as(owner_a) FROM spike_ids;
+SET LOCAL ROLE authenticated;
+SELECT manage_transfer_primary_owner((SELECT studio_a FROM spike_ids), (SELECT member_a FROM spike_ids));
+RESET ROLE;
+SELECT spike_as(member_a) FROM spike_ids;
+SET LOCAL ROLE authenticated;
+SELECT manage_remove_staff((SELECT studio_a FROM spike_ids), (SELECT owner_a FROM spike_ids));
+SELECT spike_assert((manage_setup_checklist((SELECT studio_a FROM spike_ids))->>'has_booking')::boolean, 'the checklist does not see the studio''s bookings');
+RESET ROLE;
+SELECT spike_assert((SELECT COUNT(*) FROM studio_staff WHERE studio_id = (SELECT studio_a FROM spike_ids) AND role = 'owner') = 1, 'the former primary owner was not removed');
+UPDATE deployment_settings SET single_studio_mode = FALSE, owner_email_allowlist = '{}';
+
+SELECT 'PASS: RLS isolation, booking, capacity, double-booking, cancellation window, waitlist promotion, entitlement consistency, owner admin RLS, single-studio mode and team invitations' AS result;
 ROLLBACK;

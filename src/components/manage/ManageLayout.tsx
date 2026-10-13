@@ -36,12 +36,14 @@ import {
   Link2,
   Megaphone,
   CheckSquare,
+  LifeBuoy,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTranslation } from "react-i18next";
 import { brand } from "@/config/brand";
 import { BrandMark } from "@/components/BrandMark";
 import { LIVE_DATA_ONLY, isLiveRoute } from "@/config/live-screens";
+import { hasPermission } from "@/types/roles";
 
 interface ManageLayoutProps {
   children: ReactNode;
@@ -68,8 +70,11 @@ const manageNavigation = [
   { nameKey: "smsInbox", href: "/manage/sms-inbox", icon: MessageSquare },
   { nameKey: "notifications", href: "/manage/notification-settings", icon: Bell },
   { nameKey: "settings", href: "/manage/settings", icon: Settings },
-  { nameKey: "studioSetup", href: "/manage/onboarding", icon: Settings, liveOnly: true },
+  { nameKey: "help", href: "/manage/help", icon: LifeBuoy, liveOnly: true },
 ];
+
+// Sections only the studio owner can open (the routes enforce it; the menu must not offer them to a manager).
+const ownerOnlyNav = new Set(["financials", "importData", "settings"]);
 
 // Activity-neutral labels for the sections that use real data (live-data-only builds).
 const liveNavLabels: Record<string, string> = {
@@ -78,7 +83,7 @@ const liveNavLabels: Record<string, string> = {
   offerings: "Prices",
   financials: "Payments",
   importData: "Import members",
-  studioSetup: "Studio setup",
+  help: "Help",
 };
 
 // Detail pages that belong to a section without sharing its path.
@@ -94,7 +99,11 @@ const visibleManageNavigation = LIVE_DATA_ONLY
 
 export function ManageLayout({ children }: ManageLayoutProps) {
   const location = useLocation();
-  const { profile, signOut } = useAuth();
+  const { profile, permissions, signOut } = useAuth();
+  const canManageSettings = hasPermission(permissions, "studio.manage_settings");
+  const navigation = LIVE_DATA_ONLY
+    ? visibleManageNavigation.filter((item) => canManageSettings || !ownerOnlyNav.has(item.nameKey))
+    : visibleManageNavigation;
   const { t } = useTranslation('manage');
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -164,7 +173,7 @@ export function ManageLayout({ children }: ManageLayoutProps) {
                 <div className="flex items-center gap-2 p-2 mb-1">
                   <div className="flex flex-col">
                     <p className="text-sm font-semibold">{profileName}</p>
-                    <p className="text-xs text-muted-foreground">{t('owner')}</p>
+                    <p className="text-xs text-muted-foreground">{LIVE_DATA_ONLY && !canManageSettings ? "Manager" : t('owner')}</p>
                   </div>
                 </div>
                 <DropdownMenuSeparator />
@@ -206,7 +215,7 @@ export function ManageLayout({ children }: ManageLayoutProps) {
           )}
         >
           <nav className="flex flex-col gap-1 p-3 h-full">
-            {visibleManageNavigation.map((item) => (
+            {navigation.map((item) => (
               <Link
                 key={item.nameKey}
                 to={item.href}

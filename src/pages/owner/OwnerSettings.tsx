@@ -4,8 +4,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { EmptyState, Field, NativeSelect, OwnerPage, Section, useOwnerAction } from "@/components/owner/OwnerPage";
-import { updateStudio, type OwnerStudio } from "@/lib/owner/api";
+import { EmptyState, Field, NativeSelect, OwnerPage, Section, ownerKeys, useOwnerAction } from "@/components/owner/OwnerPage";
+import { useQuery } from "@tanstack/react-query";
+import { TeamSection } from "@/components/owner/TeamSection";
+import { confirmStudioDetails, getSetupChecklist, updateStudio, type OwnerStudio } from "@/lib/owner/api";
 import { TIMEZONE_OPTIONS, isHexColor, isValidEmail, isValidSlug, withOption } from "@/lib/owner/studio-defaults";
 
 const WINDOW_UNITS = [["60", "hours"], ["1", "minutes"]] as const;
@@ -43,6 +45,9 @@ function SettingsBody({ studio }: { studio: OwnerStudio }) {
   const [primary, setPrimary] = useState(studio.primary_color ?? "");
   const [secondary, setSecondary] = useState(studio.secondary_color ?? "");
   const [busy, setBusy] = useState(false);
+  // Whether an owner has confirmed these details yet (the first item on the dashboard's list).
+  const checklist = useQuery({ queryKey: [...ownerKeys.all, "checklist", studio.id], queryFn: () => getSetupChecklist(studio.id) });
+  const confirmed = checklist.data?.details_confirmed ?? true;
 
   // The listing can also be switched from the dashboard; follow it.
   useEffect(() => setDiscoverable(studio.discoverable), [studio.discoverable]);
@@ -66,10 +71,10 @@ function SettingsBody({ studio }: { studio: OwnerStudio }) {
 
   const save = async () => {
     setBusy(true);
-    await run(
-      () => updateStudio(studio.id, { name, slug, email, timezone, cancellationMinutes: minutes, discoverable, primaryColor: primary, secondaryColor: secondary }),
-      "Settings saved",
-    );
+    await run(async () => {
+      if (changed) await updateStudio(studio.id, { name, slug, email, timezone, cancellationMinutes: minutes, discoverable, primaryColor: primary, secondaryColor: secondary });
+      await confirmStudioDetails(studio.id);
+    }, changed ? "Settings saved" : "Details confirmed");
     setBusy(false);
   };
 
@@ -138,9 +143,14 @@ function SettingsBody({ studio }: { studio: OwnerStudio }) {
       </Section>
 
       <div className="flex items-center gap-3">
-        <Button onClick={() => void save()} disabled={!valid || !changed || busy}>{busy ? "Saving…" : "Save settings"}</Button>
-        {!changed && <span className="text-xs text-muted-foreground">No changes to save.</span>}
+        <Button onClick={() => void save()} disabled={!valid || busy || (!changed && confirmed)}>
+          {busy ? "Saving…" : changed || confirmed ? "Save settings" : "Confirm these details"}
+        </Button>
+        {!changed && confirmed && <span className="text-xs text-muted-foreground">No changes to save.</span>}
+        {!changed && !confirmed && <span className="text-xs text-muted-foreground">Check everything above is right, then confirm.</span>}
       </div>
+
+      <TeamSection studio={studio} />
     </div>
   );
 }

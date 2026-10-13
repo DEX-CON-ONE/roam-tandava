@@ -130,6 +130,7 @@ const DataDictionaryManage = import.meta.env.VITE_LIVE_DATA_ONLY === "true" ? No
 const DefinitionsManage = import.meta.env.VITE_LIVE_DATA_ONLY === "true" ? NoPage : lazy(() => import("./pages/manage/Definitions"));
 const EmbedSettingsManage = lazy(() => import("./pages/manage/EmbedSettings"));
 // Session roster: real data only, so it exists only in live-data-only builds.
+const HelpManage = import.meta.env.VITE_LIVE_DATA_ONLY === "true" ? lazy(() => import("./pages/owner/OwnerHelp")) : lazy(() => import("./pages/NotFound"));
 const SessionManage = import.meta.env.VITE_LIVE_DATA_ONLY === "true" ? lazy(() => import("./pages/owner/OwnerSession")) : lazy(() => import("./pages/NotFound"));
 
 const NotificationPreferences = import.meta.env.VITE_LIVE_DATA_ONLY === "true" ? NoPage : lazy(() => import("./pages/account/NotificationPreferences"));
@@ -246,6 +247,7 @@ const App = () => (
                   <Route path="/manage/reports" element={<LiveOnly><ProtectedRoute permission="studio.manage_schedule"><ReportsManage /></ProtectedRoute></LiveOnly>} />
                   <Route path="/manage/import" element={<ProtectedRoute permission="studio.manage_settings"><ImportManage /></ProtectedRoute>} />
                   <Route path="/manage/settings" element={<ProtectedRoute permission="studio.manage_settings"><SettingsManage /></ProtectedRoute>} />
+                  <Route path="/manage/help" element={<ProtectedRoute permission="studio.manage_schedule"><HelpManage /></ProtectedRoute>} />
                   {/* No role gate: this is where a new owner *creates* their studio,
                        before they hold any studio role. StudioSetupRoute asks the
                        database who may use it (single-studio mode + owner allow-list);

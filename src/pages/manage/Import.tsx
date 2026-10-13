@@ -1,3 +1,4 @@
+import { brand } from "@/config/brand";
 import { useState, useCallback } from "react";
 import { ManageLayout } from "@/components/manage/ManageLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -62,7 +63,7 @@ const sourceOptions = Object.entries(CONNECTOR_PROVIDERS).map(([id, info]) => ({
 }));
 
 const importTypes = [
-  { value: "clients", label: "Clients / Students", icon: Users, description: "Names, emails, phone numbers, emergency contacts" },
+  { value: "clients", label: brand.isCustom ? "Members" : "Clients / Students", icon: Users, description: "Names, emails, phone numbers, emergency contacts" },
   { value: "attendance", label: "Class History / Attendance", icon: Calendar, description: "Past class bookings and attendance records" },
   { value: "transactions", label: "Transaction History", icon: CreditCard, description: "Purchase history, payments, and refunds" },
 ];
@@ -281,7 +282,7 @@ export default function ImportManage() {
             <Card>
               <CardHeader>
                 <CardTitle>Select Source Platform</CardTitle>
-                <CardDescription>Where is your data coming from? Tandava is not affiliated with any of these providers.</CardDescription>
+                <CardDescription>Where is your data coming from? {brand.isCustom ? "This tool" : "Tandava"} is not affiliated with any of these providers.</CardDescription>
               </CardHeader>
               <CardContent className="grid sm:grid-cols-2 gap-3">
                 {sourceOptions.map((source) => (
@@ -646,7 +647,7 @@ export default function ImportManage() {
               </Button>
               <Button asChild>
                 <a href="/manage/students">
-                  View Imported Students <ArrowRight className="h-4 w-4 ms-2" />
+                  {brand.isCustom ? "View imported members" : "View Imported Students"} <ArrowRight className="h-4 w-4 ms-2" />
                 </a>
               </Button>
             </div>
